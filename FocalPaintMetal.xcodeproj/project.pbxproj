@@ -1,0 +1,165 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 55;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D1803908283F331500ED147A /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = D1803907283F331500ED147A /* Shaders.metal */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		D1803906283F331500ED147A /* Bridging-Header.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "Bridging-Header.h"; sourceTree = "<group>"; };
+		D1803907283F331500ED147A /* Shaders.metal */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
+		D1803909283F338E00ED147A /* ShaderDefinitions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ShaderDefinitions.h; sourceTree = "<group>"; };
+		D1CD30C328318055007D14D6 /* FocalPaintMetal.metallib */ = {isa = PBXFileReference; explicitFileType = "archive.metal-library"; includeInIndex = 0; path = FocalPaintMetal.metallib; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		D1CD30BC28318055007D14D6 = {
+			isa = PBXGroup;
+			children = (
+				D1803909283F338E00ED147A /* ShaderDefinitions.h */,
+				D1803906283F331500ED147A /* Bridging-Header.h */,
+				D1803907283F331500ED147A /* Shaders.metal */,
+				D1CD30C428318055007D14D6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D1CD30C428318055007D14D6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D1CD30C328318055007D14D6 /* FocalPaintMetal.metallib */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D1CD30C228318055007D14D6 /* FocalPaintMetal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1CD30CA28318055007D14D6 /* Build configuration list for PBXNativeTarget "FocalPaintMetal" */;
+			buildPhases = (
+				D1CD30C128318055007D14D6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FocalPaintMetal;
+			productName = FocalPaintMetal;
+			productReference = D1CD30C328318055007D14D6 /* FocalPaintMetal.metallib */;
+			productType = "com.apple.product-type.metal-library";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D1CD30BD28318055007D14D6 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1330;
+				TargetAttributes = {
+					D1CD30C228318055007D14D6 = {
+						CreatedOnToolsVersion = 13.3.1;
+					};
+				};
+			};
+			buildConfigurationList = D1CD30C028318055007D14D6 /* Build configuration list for PBXProject "FocalPaintMetal" */;
+			compatibilityVersion = "Xcode 13.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D1CD30BC28318055007D14D6;
+			productRefGroup = D1CD30C428318055007D14D6 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D1CD30C228318055007D14D6 /* FocalPaintMetal */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D1CD30C128318055007D14D6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1803908283F331500ED147A /* Shaders.metal in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D1CD30C828318055007D14D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.4;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		D1CD30C928318055007D14D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.4;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		D1CD30CB28318055007D14D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2J3698B9CT;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		D1CD30CC28318055007D14D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2J3698B9CT;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D1CD30C028318055007D14D6 /* Build configuration list for PBXProject "FocalPaintMetal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1CD30C828318055007D14D6 /* Debug */,
+				D1CD30C928318055007D14D6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D1CD30CA28318055007D14D6 /* Build configuration list for PBXNativeTarget "FocalPaintMetal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D1CD30CB28318055007D14D6 /* Debug */,
+				D1CD30CC28318055007D14D6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D1CD30BD28318055007D14D6 /* Project object */;
+}
