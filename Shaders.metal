@@ -562,6 +562,102 @@ kernel void drawRadialSweep(constant SpectralColorArray *spectralColorArray [[ b
 }
 
 
+// example custom shader, this "pushes" paint around based on the dab angle, which you can
+// control by mapping Stroke Direction or Azimuth, or whatever, to control.
+
+kernel void customBrushShader(
+  constant Dab *dabArray [[ buffer(0) ]],
+  constant DabMeta *dabMeta [[ buffer(1) ]],
+  texture2d_array <half, access::read_write> canvas [[texture(0)]],
+  texture2d_array <half, access::read> smudge [[texture(1)]],
+  texture2d_array <half, access::read> lowerCanvas [[texture(2)]],
+  texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
+  uint2 gid [[thread_position_in_grid]],
+  uint tid [[thread_index_in_threadgroup]])
+  {
+      
+      
+      half4 cS = canvas.read(gid, 0);
+      half4 cM = canvas.read(gid, 1);
+      half4 cL = canvas.read(gid, 2);
+      half4 cMeta = canvas.read(gid, 3);
+      
+      // for each dab, do a bunch of stuff and store it in the dst
+      int dabCount = dabMeta->dabCount;
+      for (int i=0; i < dabCount; i++) {
+          // center of the dab to draw
+          float2 center = (dabArray[i].pos);
+          // translate the position using the global texOrigin coordinates
+          half xOffset = half(gid.x) + dabMeta->texOrigin.x - center.x;
+          half yOffset = half(gid.y) + dabMeta->texOrigin.y - center.y;
+          half strength = dabArray[i].strength;
+          // radius of the dab to draw, in pixels
+          half radius = dabArray[i].radius;
+          // hardness is how much to feather the edge of a dab
+          half hardness = dabArray[i].hardness;
+          
+          half rotation = dabArray[i].dabAngle;
+          
+          // use a signed distance field to draw the shape
+          half dist;
+          // draw ellipse and/or squircle shape
+          if ( dabArray[i].dabRatio < 1.0 || dabArray[i].dabShape > 0.0) {
+              // major and minor axis lengths
+              half a = pow((radius * half(dabArray[i].dabRatio)), half(2.0));
+              half b = pow((radius), half(2.0));
+
+              
+              
+              // apply affine transform for rotation and offset
+              float x = xOffset * cos(rotation) + (yOffset) * sin(rotation);
+              float y = -1 * ((xOffset) * sin(rotation)) + (yOffset) * cos(rotation);
+
+              // standard equation for ellipse == 1 if point is exactly on the ellipse perimeter
+              half distEllipse = (pow(x, 2.0) / a ) + (pow((y), (2.0)) / b);
+              
+              // squircle
+              half n = dabArray[i].dabShapeMod;
+              half distSquircle = max(half(0.0), half(pow(half(abs(x / (radius * dabArray[i].dabRatio))), n) + pow(half(abs(y / radius)), n)));
+
+              // interpolate between ellipse and squircle shape
+              dist = (1.0 - dabArray[i].dabShape) * distEllipse + dabArray[i].dabShape * distSquircle;
+          } else {
+              // optimization for just a simple circle
+              dist = distance(float2(gid) + float2(dabMeta->texOrigin), center) / radius;
+          }
+          
+          // if outside the ellipse, don't draw anything for this dab
+          if (dist > 1.0 || dist < 0.0 || isnan(dist)) continue;
+          // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
+          strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
+          half strengthInv = 1.0 - strength;
+          
+          // this implementation
+          float2 dir = round(normalize(float2(cos(rotation), sin(rotation)) + 0.5));
+          
+          half4 cS_sample = canvas.read(uint2(int2(gid) + int2(dir)), 0);
+          half4 cM_sample = canvas.read(uint2(int2(gid) + int2(dir)), 1);
+          half4 cL_sample = canvas.read(uint2(int2(gid) + int2(dir)), 2);
+          half4 cMeta_sample = canvas.read(uint2(int2(gid) + int2(dir)), 3);
+          
+          // blend w/ canvas pixel
+          cS = cS * strengthInv + cS_sample * strength;
+          cM = cM * strengthInv + cM_sample * strength;
+          cL = cL * strengthInv + cL_sample * strength;
+          cMeta = cMeta * strengthInv + cMeta_sample * strength;
+          
+      }
+      
+      
+
+      
+      canvas.write((cS), gid, 0);
+      canvas.write((cM), gid, 1);
+      canvas.write((cL), gid, 2);
+      canvas.write((cMeta), gid, 3);
+}
+
+
 //constant bool hasLowerTexture [[function_constant(0)]];
 
 kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
