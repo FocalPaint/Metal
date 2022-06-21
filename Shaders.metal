@@ -565,26 +565,84 @@ kernel void drawRadialSweep(constant SpectralColorArray *spectralColorArray [[ b
 // example custom shader, this "pushes" paint around based on the dab angle, which you can
 // control by mapping Stroke Direction or Azimuth, or whatever, to control.
 
+void blendCustom(half4 middle[4], half4 leading[4], half4 trailing[4], half strength)
+{
+    
+    
+    //if ( leading[3].y < center[3].y * 0.1 || trailing[3].y < center[3].y * 0.1 ) return;
+
+    //half vol = middle[3].y;
+    float strengthForward = clamp(strength + (float(middle[3].y  - leading[3].y ) / (middle[3].y + leading[3].y)), 0.0, 1.0);
+    float strengthInvF=(1.0 - strengthForward);
+
+    half volIncrease = (trailing[3].y < 1 && middle[3].y > 0.0 && middle[3].y < 10.0) ?  strengthForward + 1.0 : 1.0 ;
+//    strengthInvF = pow( (strengthInvF), 1.0 / volIncrease);
+    
+
+
+    middle[3].x = clamp(middle[3].x * strengthInvF + leading[3].x * strengthForward, 0.0, 1.0);
+    
+    half beerFacMiddle = middle[3].z > 0.0 ? middle[3].z : 1.0;
+    half beerFacLeading = middle[3].z > 0.0 ? middle[3].z : 1.0;
+
+    middle[3].y = clamp(middle[3].y * pow((strengthInvF), 1.0 / volIncrease) + leading[3].y * strengthForward, 0.0, 10.0);
+    middle[3].w = middle[3].w * strengthInvF + leading[3].w * strengthForward;
+    middle[3].w = clamp( middle[3].w + strength * 0.01, 0.0, 1000.0);
+    middle[3].z = middle[3].z * strengthInvF + leading[3].z * strengthForward;
+    
+    // apply beer-lambert-like multiplier to the color based on opacity and thickness
+    half beerMultiplier = (middle[3].y * ((half(1.0) - middle[3].x))) + 1.0;
+
+    // blend w/ canvas pixel
+    for (int i = 0; i < 3; ++i) {
+        middle[i] = ((middle[i] / beerFacMiddle) * strengthInvF + (leading[i] / beerFacLeading) * strengthForward) * beerMultiplier;
+    }
+   
+}
+
 kernel void customBrushShader(
   constant Dab *dabArray [[ buffer(0) ]],
   constant DabMeta *dabMeta [[ buffer(1) ]],
   texture2d_array <half, access::read_write> canvas [[texture(0)]],
   texture2d_array <half, access::read> smudge [[texture(1)]],
   texture2d_array <half, access::read> lowerCanvas [[texture(2)]],
-  texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
+  texture2d_array <half, access::sample> canvasSample [[texture(3)]],
   uint2 gid [[thread_position_in_grid]],
   uint tid [[thread_index_in_threadgroup]])
   {
+//      constexpr sampler s(coord::pixel,
+//                    address::clamp_to_edge,
+//                    filter::nearest);
+      
+//      if (gid.x == 0 || gid.y == 0 | gid.x >= canvas.get_width() - 1 || gid.y >= canvas.get_height() - 1) return;
       
       
-      half4 cS = canvas.read(gid, 0);
-      half4 cM = canvas.read(gid, 1);
-      half4 cL = canvas.read(gid, 2);
-      half4 cMeta = canvas.read(gid, 3);
+//      half4 middle[4];
+//      half4 left[4];
+//      half4 upperLeft[4];
+//      half4 up[4];
+//      half4 upperRight[4];
+//      half4 right[4];
+//      half4 lowerRight[4];
+//      half4 down[4];
+//      half4 lowerLeft[4];
+//
+//      int i;
+//      for (i = 0; i < 4; ++i) {
+//          middle[i] = canvas.read(gid, i);
+//          left[i] = canvas.read(uint2(int2(gid) - int2(1,0)), i);
+//          upperLeft[i] = canvas.read(uint2(int2(gid) - int2(1,1)), i);
+//          up[i] = canvas.read(uint2(int2(gid) - int2(0,1)), i);
+//          upperRight[i] = canvas.read(uint2(int2(gid) - int2(-1,1)), i);
+//          right[i] = canvas.read(uint2(int2(gid) - int2(-1,0)), i);
+//          lowerRight[i] = canvas.read(uint2(int2(gid) - int2(-1,-1)), i);
+//          down[i] = canvas.read(uint2(int2(gid) - int2(0,-1)), i);
+//          lowerLeft[i] = canvas.read(uint2(int2(gid) - int2(1,-1)), i);
+//      }
       
       // for each dab, do a bunch of stuff and store it in the dst
       int dabCount = dabMeta->dabCount;
-      for (int i=0; i < dabCount; i++) {
+      for (int i=0; i < dabCount; ++i) {
           // center of the dab to draw
           float2 center = (dabArray[i].pos);
           // translate the position using the global texOrigin coordinates
@@ -630,31 +688,54 @@ kernel void customBrushShader(
           if (dist > 1.0 || dist < 0.0 || isnan(dist)) continue;
           // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
           strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
-          half strengthInv = 1.0 - strength;
           
-          // this implementation
-          float2 dir = round(normalize(float2(cos(rotation), sin(rotation)) + 0.5));
-          
-          half4 cS_sample = canvas.read(uint2(int2(gid) + int2(dir)), 0);
-          half4 cM_sample = canvas.read(uint2(int2(gid) + int2(dir)), 1);
-          half4 cL_sample = canvas.read(uint2(int2(gid) + int2(dir)), 2);
-          half4 cMeta_sample = canvas.read(uint2(int2(gid) + int2(dir)), 3);
-          
-          // blend w/ canvas pixel
-          cS = cS * strengthInv + cS_sample * strength;
-          cM = cM * strengthInv + cM_sample * strength;
-          cL = cL * strengthInv + cL_sample * strength;
-          cMeta = cMeta * strengthInv + cMeta_sample * strength;
-          
-      }
-      
-      
+          // determine which two samples to read based on angle
+          int2 dir = int2(round(normalize(float2(cos(rotation), sin(rotation))  )* 1.8));
+          int2 dirRev = int2(-1.0 * float2(dir));
+          //uint2 sample_coord_trailing = uint2(int2(gid) + int2(dir));
 
-      
-      canvas.write((cS), gid, 0);
-      canvas.write((cM), gid, 1);
-      canvas.write((cL), gid, 2);
-      canvas.write((cMeta), gid, 3);
+//          if (dir.x == -1 && dir.y == 0) {
+          
+          half4 middle[4];
+          half4 leading[4];
+          half4 trailing[4];
+          for (int i = 0; i < 4; ++i) {
+              middle[i] = canvas.read(gid, i);
+              leading[i] = canvas.read(uint2(int2(gid) - dir), i);
+              trailing[i] = canvas.read(uint2(int2(gid) - dirRev), i);
+              
+          }
+          
+          blendCustom(middle, leading, trailing, strength);
+          for (int i = 0; i < 4; ++i) {
+            canvas.write(middle[i], gid, i);
+//            canvas.write(leading[i], uint2(int2(gid) - dir), i);
+//            canvas.write(trailing[i], uint2(int2(gid) - dirRev), i);
+//
+          }
+         
+        
+//          }
+//
+//
+//          uint2 sample_coord_leading = uint2(float2(gid) + float2(dirRev));
+
+         // don’t draw or pull over empty area
+ 
+      }
+
+//      for (i = 0; i < 4; ++i) {
+//        canvas.write(middle[i], gid, i);
+//        canvas.write(left[i], uint2(int2(gid) - int2(1,0)), i);
+//        canvas.write(upperLeft[i], uint2(int2(gid) - int2(1,1)), i);
+//        canvas.write(up[i], uint2(int2(gid) - int2(0,1)), i);
+//        canvas.write(upperRight[i], uint2(int2(gid) - int2(-1,1)), i);
+//        canvas.write(right[i], uint2(int2(gid) - int2(-1,0)), i);
+//        canvas.write(lowerRight[i], uint2(int2(gid) - int2(-1,-1)), i);
+//        canvas.write(down[i], uint2(int2(gid) - int2(0,-1)), i);
+//        canvas.write(lowerLeft[i], uint2(int2(gid) - int2(1,-1)), i);
+//      }
+
 }
 
 
