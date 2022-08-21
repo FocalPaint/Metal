@@ -901,7 +901,7 @@ kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
         half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
         
         
-        half workedAmount = eraser * clamp(half(strength * dabArray[i].pressure + dstMeta.w), half(0.0), half(1000.0));
+        half workedAmount = eraser * clamp(half(strength * dabArray[i].pressure + dstMeta.w + (strength * 10 * dabArray[i].wetness)), half(0.0), half(1000.0));
         half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + (1.0 - smudgeAmount) * beerMultiplier * eraser) * strength;
         half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
         
@@ -1017,7 +1017,7 @@ kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
 
     
     half beerFac = (srcMeta.z * overOp.srcThickness + dstAndLayerOpacity * dstMeta.z);
-    half workedAmount = (srcMeta.w * srcAndLayerOpacity + dstAndLayerOpacity + dstMeta.w);
+    half workedAmount = (srcMeta.w * srcAndLayerOpacity + dstMeta.w);
     srcMeta = half4(clamp(opacity, half(0.0), half(1.0)), volume, beerFac, workedAmount);
     
     dst.write(srcS, gid, 0);

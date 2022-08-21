@@ -89,6 +89,8 @@ struct Dab {
     // how stong to pick up color from layer below active layer
     // only when smudging
     float solvent;
+    // how much media sinks into depressions in the canvas texture
+    float wetness;
 };
 
 
