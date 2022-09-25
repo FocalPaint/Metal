@@ -96,7 +96,7 @@ kernel void rgbToSpectral(texture2d <half, access::read> rgbTexture [[texture(0)
     spectralTexture.write(log2(colorShort) * alpha, gid, 0);
     spectralTexture.write(log2(colorMedium) * alpha, gid, 1);
     spectralTexture.write(log2(colorLong) * alpha, gid, 2);
-    spectralTexture.write(half4(alpha, greyRGBA.r, 0.0, 0.0), gid, 3);
+    spectralTexture.write(half4(alpha, max(greyRGBA.r, EPSILON), 1.0, 0.0), gid, 3);
     
 }
 
