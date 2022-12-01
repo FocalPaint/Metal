@@ -91,6 +91,8 @@ struct Dab {
     float solvent;
     // how much media sinks into depressions in the canvas texture
     float wetness;
+    // thickness threshold, similar to lock alpha concept
+    float thicknessThreshold;
 };
 
 
