@@ -787,7 +787,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     if (dist > 1.0 || dist < 0.0 || isnan(dist)) return;
     // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
     strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
-    half strengthInv = (1.0 - strength) * eraserBottom;
+    half strengthInv = (1.0 - strength);
     strength *= eraser;
     
 
@@ -814,8 +814,8 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     
     // calculate volume/thickness
     half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume)) * strength;
-    half volumeBottom = strengthInv * dstMeta.y;
-    half volumeResult = (volumeTop + volumeBottom);
+    half volumeBottom = eraserBottom * dstMeta.y * invSmudgeAmount;
+    half volumeResult = clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
     
     
     // this is less weird than smudgeThicknessThreshold.
@@ -857,7 +857,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
     
     
-    half workedAmount = eraserBottom * clamp(half(dabArray[dabIndex].pressure + dstMeta.w + (10 * dabArray[dabIndex].wetness)), half(0.0), half(1000.0));
+    half workedAmount = clamp(half(strength * dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness) + eraserBottom * dstMeta.w), half(0.0), half(1000.0));
     half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
     half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
     
