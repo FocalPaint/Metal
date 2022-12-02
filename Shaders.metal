@@ -751,7 +751,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // ratio of smudge bucket color to the brush color
     // 1.0 will smear existing paint
     half smudgeAmount = dabArray[dabIndex].smudgeAmount;
-    half invSmudgeAmount = 1.0 - smudgeAmount;
+    
     // opacity is opaqueness
     // Partially opaque and thick paint will be darker
     half opacity = clamp(half(dabArray[dabIndex].opacity),EPSILON, half(1.0));
@@ -766,7 +766,6 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half hardness = dabArray[dabIndex].hardness;
     // eraser removes existing paint and thickness
     half eraser = 1.0 - (dabArray[dabIndex].eraser);
-    half eraserBottom = 1.0 - (dabArray[dabIndex].eraser * strength);
     
     // jitter the opacity
     if (dabArray[dabIndex].opacityJitterChance > 0.0 && dabArray[dabIndex].opacityJitter > 0.0) {
@@ -789,6 +788,8 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
     half strengthInv = (1.0 - strength);
     strength *= eraser;
+    half eraserStrength = 1.0 - (dabArray[dabIndex].eraser * strength);
+    half invSmudgeAmount = (1.0 - smudgeAmount);
     
 
     // Smudge Bucket is just a small texture that stores
@@ -814,8 +815,8 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     
     // calculate volume/thickness
     half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume)) * strength;
-    half volumeBottom = eraserBottom * dstMeta.y * invSmudgeAmount;
-    half volumeResult = clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
+    half volumeBottom = strengthInv * dstMeta.y;
+    half volumeResult = eraserStrength * clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
     
     
     // this is less weird than smudgeThicknessThreshold.
@@ -851,13 +852,13 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // calculate opacity before applying thickness
     half topOpacity = (smudgeAmount * smudgeBucketD.x + invSmudgeAmount * opacity) * strength;
     half bottomOpacity = strengthInv * dstMeta.x;
-    half opacityResult =  (topOpacity + bottomOpacity);
+    half opacityResult =  eraserStrength * (topOpacity + bottomOpacity);
     
     // apply beer-lambert-like multiplier to the color based on opacity and thickness
     half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
     
     
-    half workedAmount = clamp(half(strength * dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness) + eraserBottom * dstMeta.w), half(0.0), half(1000.0));
+    half workedAmount = eraserStrength * clamp(half(strength * dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness) +  dstMeta.w), half(0.0), half(1000.0));
     half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
     half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
     
