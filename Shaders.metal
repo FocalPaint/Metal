@@ -668,70 +668,6 @@ kernel void customBrushShader(
 }
 
 
-static void jitterValueForDab(half4 color0, half4 color1, half4 color2, const constant Dab *dabArray, const constant DabMeta *dabMeta, int dabIndex, uint tid, half xOffset, half yOffset) {
-    if ( dabArray[dabIndex].valueJitter != 0.0 && dabArray[dabIndex].valueJitterChance > 0.0) {
-        half valueJitterChance = 1.0 - rand(xOffset + tid, yOffset + tid, dabMeta->randomSeeds.y);
-        half valueJitter =  dabArray[dabIndex].valueJitter * valueJitterChance;
-        
-        if (valueJitterChance <= dabArray[dabIndex].valueJitterChance) {
-            
-            if (valueJitter < 0.0 ) {
-                valueJitter = -valueJitter;
-                for (uint i=0; i < 4; i++) {
-                    color0[i] = max(EPSILON_LOG, color0[i] + valueJitter * EPSILON_LOG);
-                    color1[i] = max(EPSILON_LOG, color1[i] + valueJitter * EPSILON_LOG);
-                    color2[i] = max(EPSILON_LOG, color2[i] + valueJitter * EPSILON_LOG);
-                    
-                }
-            } else {
-                valueJitter = 1.0 - valueJitter;
-                for (uint i=0; i < 4; i++) {
-                    color0[i] *= valueJitter;
-                    color1[i] *= valueJitter;
-                    color2[i] *= valueJitter;
-                }
-            }
-        }
-    }
-}
-
-static void jitterColorForDab(half4 color0, half4 color1, half4 color2, const constant Dab *dabArray, const constant DabMeta *dabMeta, int dabIndex, uint tid, half xOffset, half yOffset) {
-    if ( dabArray[dabIndex].colorJitter != 0.0 && dabArray[dabIndex].colorJitterChance > 0.0) {
-        
-        half colorJitterChance = rand(yOffset + tid, xOffset + tid, dabMeta->randomSeeds.w);
-        half colorJitter = dabArray[dabIndex].colorJitter * colorJitterChance;
-        
-        if (colorJitterChance < dabArray[dabIndex].colorJitterChance) {
-            if (colorJitter > 0.0) {
-                
-                half invColorJitter = 1.0 - colorJitter;
-                for (uint i=0; i < 3; i++) {
-                    color0[i] = color0[i] * invColorJitter + colorJitter * color0[i + 1];
-                    color1[i] = color1[i] * invColorJitter + colorJitter * color1[i + 1];
-                    color2[i] = color2[i] * invColorJitter + colorJitter * color2[i + 1];
-                }
-                color0[3] = color0[3] * invColorJitter + colorJitter * color1[0];
-                color1[3] = color1[3] * invColorJitter + colorJitter * color2[0];
-                color2[3] = color2[3] * invColorJitter + colorJitter * color0[0];
-                
-            } else if (colorJitter < 0.0) {
-                colorJitter = -colorJitter;
-                half invColorJitter = 1.0 - colorJitter;
-                for (uint i=3; i > 0; i--) {
-                    color0[i] = color0[i] * invColorJitter + colorJitter * color0[i - 1];
-                    color1[i] = color1[i] * invColorJitter + colorJitter * color1[i - 1];
-                    color2[i] = color2[i] * invColorJitter + colorJitter * color2[i - 1];
-                }
-                color0[0] = color0[0] * invColorJitter + colorJitter * color2[3];
-                color1[0] = color1[0] * invColorJitter + colorJitter * color0[3];
-                color2[0] = color2[0] * invColorJitter + colorJitter * color1[3];
-            }
-        }
-        
-    }
-}
-
-
 // draw a normal dab
 static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const constant DabMeta *dabMeta, thread half4 &dstA, thread half4 &dstB, thread half4 &dstC, thread half4 &dstMeta, thread half4 &lowerA, thread half4 &lowerB, thread half4 &lowerC, thread half4 &lowerMeta, thread const texture2d_array<half, access::read> &smudgeBuckets, uint2 gid, uint tid) {
 
@@ -787,8 +723,9 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
     strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
     half strengthInv = (1.0 - strength);
-    strength *= eraser;
     half eraserStrength = 1.0 - (dabArray[dabIndex].eraser * strength);
+
+    strength *= eraser;
     half invSmudgeAmount = (1.0 - smudgeAmount);
     
 
@@ -858,7 +795,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
     
     
-    half workedAmount = eraserStrength * clamp(half(strength * dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness) +  dstMeta.w), half(0.0), half(1000.0));
+    half workedAmount = eraserStrength * clamp(half(strength * (dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness)) +  dstMeta.w), half(0.0), half(1000.0));
     half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
     half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
     
@@ -868,9 +805,66 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half4 color1 = half4(dabArray[dabIndex].color[1]);
     half4 color2 = half4(dabArray[dabIndex].color[2]);
     
-    jitterValueForDab(color0, color1, color2, dabArray, dabMeta, dabIndex, tid, xOffset, yOffset);
     
-    jitterColorForDab(color0, color1, color2, dabArray, dabMeta, dabIndex, tid, xOffset, yOffset);
+    // jitter the color channels left or right
+    if ( dabArray[dabIndex].colorJitter != 0.0 && dabArray[dabIndex].colorJitterChance > 0.0) {
+        
+        half colorJitterChance = rand(yOffset + tid, xOffset + tid, dabMeta->randomSeeds.w);
+        half colorJitter = dabArray[dabIndex].colorJitter * colorJitterChance;
+        
+        if (colorJitterChance < dabArray[dabIndex].colorJitterChance) {
+            if (colorJitter > 0.0) {
+                
+                half invColorJitter = 1.0 - colorJitter;
+                for (uint i=0; i < 3; i++) {
+                    color0[i] = color0[i] * invColorJitter + colorJitter * color0[i + 1];
+                    color1[i] = color1[i] * invColorJitter + colorJitter * color1[i + 1];
+                    color2[i] = color2[i] * invColorJitter + colorJitter * color2[i + 1];
+                }
+                color0[3] = color0[3] * invColorJitter + colorJitter * color1[0];
+                color1[3] = color1[3] * invColorJitter + colorJitter * color2[0];
+                color2[3] = color2[3] * invColorJitter + colorJitter * color0[0];
+                
+            } else if (colorJitter < 0.0) {
+                colorJitter = -colorJitter;
+                half invColorJitter = 1.0 - colorJitter;
+                for (uint i=3; i > 0; i--) {
+                    color0[i] = color0[i] * invColorJitter + colorJitter * color0[i - 1];
+                    color1[i] = color1[i] * invColorJitter + colorJitter * color1[i - 1];
+                    color2[i] = color2[i] * invColorJitter + colorJitter * color2[i - 1];
+                }
+                color0[0] = color0[0] * invColorJitter + colorJitter * color2[3];
+                color1[0] = color1[0] * invColorJitter + colorJitter * color0[3];
+                color2[0] = color2[0] * invColorJitter + colorJitter * color1[3];
+            }
+        }
+        
+        if ( dabArray[dabIndex].valueJitter != 0.0 && dabArray[dabIndex].valueJitterChance > 0.0) {
+            half valueJitterChance = 1.0 - rand(xOffset + tid, yOffset + tid, dabMeta->randomSeeds.y);
+            half valueJitter =  dabArray[dabIndex].valueJitter * valueJitterChance;
+            
+            if (valueJitterChance <= dabArray[dabIndex].valueJitterChance) {
+                
+                if (valueJitter < 0.0 ) {
+                    valueJitter = -valueJitter;
+                    for (uint i=0; i < 4; i++) {
+                        color0[i] = max(EPSILON_LOG, color0[i] + valueJitter * EPSILON_LOG);
+                        color1[i] = max(EPSILON_LOG, color1[i] + valueJitter * EPSILON_LOG);
+                        color2[i] = max(EPSILON_LOG, color2[i] + valueJitter * EPSILON_LOG);
+                        
+                    }
+                } else {
+                    valueJitter = 1.0 - valueJitter;
+                    for (uint i=0; i < 4; i++) {
+                        color0[i] *= valueJitter;
+                        color1[i] *= valueJitter;
+                        color2[i] *= valueJitter;
+                    }
+                }
+            }
+        }
+        
+    }
     
     // combine smudge, brush color,
     half4 colorA = (smudgeAmount * smudgeBucketA + invSmudgeAmount * color0 * beerMultiplier) * strength;
