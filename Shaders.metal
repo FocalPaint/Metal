@@ -750,20 +750,6 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
         if (( volumeJitterChance < dabArray[dabIndex].volumeJitterChance )) volume *= max(half(1.0 - dabArray[dabIndex].volumeJitter), volumeJitterChance);
     }
     
-    // calculate volume/thickness
-    half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume)) * strength;
-    half volumeBottom = strengthInv * dstMeta.y;
-    half volumeResult = eraserStrength * clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
-    
-    
-    // this is less weird than smudgeThicknessThreshold.
-    // Don't paint if the brush thickness is going to add less than what is already on the canvas
-    half thicknessThreshold = dabArray[dabIndex].thicknessThreshold * eraser;
-    if (volumeTop < thicknessThreshold * dstMeta.y) {
-        return;
-    }
-    
-    
     
     half4 smudgeBucketA = smudgeBuckets.read(bucket, 0);
     half4 smudgeBucketB = smudgeBuckets.read(bucket, 1);
@@ -780,12 +766,29 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
         half4 lowerC = lowerLayer.read(gid, 2);
         half4 lowerMeta = lowerLayer.read(gid, 3);
         
-        half liftFac = lowerMeta.y * dabArray[dabIndex].solvent;
+        half liftFac = clamp((lowerMeta.y / 10.0) * dabArray[dabIndex].solvent, 0.0, 1.0);
         smudgeBucketA = smudgeBucketA * (1.0 - liftFac) + lowerA * liftFac;
         smudgeBucketB = smudgeBucketB * (1.0 - liftFac) + lowerB * liftFac;
         smudgeBucketC = smudgeBucketC * (1.0 - liftFac) + lowerC * liftFac;
         smudgeBucketD = smudgeBucketD * (1.0 - liftFac) + lowerMeta * liftFac;
     }
+    
+    
+    // calculate volume/thickness
+    half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume)) * strength;
+    half volumeBottom = strengthInv * dstMeta.y;
+    half volumeResult = eraserStrength * clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
+    
+    
+    // this is less weird than smudgeThicknessThreshold.
+    // Don't paint if the brush thickness is going to add less than what is already on the canvas
+    half thicknessThreshold = dabArray[dabIndex].thicknessThreshold * eraser;
+    if (volumeTop < thicknessThreshold * dstMeta.y) {
+        return;
+    }
+    
+    
+    
     
   
     
