@@ -669,7 +669,7 @@ kernel void customBrushShader(
 
 
 // draw a normal dab
-static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const constant DabMeta *dabMeta, thread half4 &dstA, thread half4 &dstB, thread half4 &dstC, thread half4 &dstMeta, thread half4 &lowerA, thread half4 &lowerB, thread half4 &lowerC, thread half4 &lowerMeta, thread const texture2d_array<half, access::read> &smudgeBuckets, uint2 gid, uint tid) {
+static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const constant DabMeta *dabMeta, thread half4 &dstA, thread half4 &dstB, thread half4 &dstC, thread half4 &dstMeta, texture2d_array <half, access::read> lowerLayer, thread const texture2d_array<half, access::read> &smudgeBuckets, uint2 gid, uint tid) {
 
     // center of the dab to draw
     float2 center = (dabArray[dabIndex].pos);
@@ -775,7 +775,10 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // up from the lower layer and mix it with the smudge color
     // but only if our paint is a solvent and can disolve it
     if (dabMeta->hasLowerTexture == 1) {
-        // if there is a lower layer, read that in. We might use it
+        half4 lowerA = lowerLayer.read(gid, 0);
+        half4 lowerB = lowerLayer.read(gid, 1);
+        half4 lowerC = lowerLayer.read(gid, 2);
+        half4 lowerMeta = lowerLayer.read(gid, 3);
         
         half liftFac = lowerMeta.y * dabArray[dabIndex].solvent;
         smudgeBucketA = smudgeBucketA * (1.0 - liftFac) + lowerA * liftFac;
@@ -898,20 +901,20 @@ kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
     half4 dstC = activeLayer.read(gid, 2);
     half4 dstMeta = activeLayer.read(gid, 3);
     
-    half4 lowerA, lowerB, lowerC, lowerMeta;
-    if (dabMeta->hasLowerTexture == 1) {
-        // if there is a lower layer, read that in. We might use it
-        
-        lowerA = lowerLayer.read(gid, 0);
-        lowerB = lowerLayer.read(gid, 1);
-        lowerC = lowerLayer.read(gid, 2);
-        lowerMeta = lowerLayer.read(gid, 3);
-    }
+//    half4 lowerA, lowerB, lowerC, lowerMeta;
+//    if (dabMeta->hasLowerTexture == 1) {
+//        // if there is a lower layer, read that in. We might use it
+//
+//        lowerA = lowerLayer.read(gid, 0);
+//        lowerB = lowerLayer.read(gid, 1);
+//        lowerC = lowerLayer.read(gid, 2);
+//        lowerMeta = lowerLayer.read(gid, 3);
+//    }
     
     // for each dab, do a bunch of stuff and store it in the dst
     int dabCount = dabMeta->dabCount;
     for (int dabIndex=0; dabIndex < dabCount; dabIndex++) {
-        drawNormalDab(dabArray, dabIndex, dabMeta, dstA, dstB, dstC, dstMeta, lowerA, lowerB, lowerC, lowerMeta, smudgeBuckets, gid, tid);
+        drawNormalDab(dabArray, dabIndex, dabMeta, dstA, dstB, dstC, dstMeta, lowerLayer, smudgeBuckets, gid, tid);
     }
     activeLayer.write(dstA, gid, 0);
     activeLayer.write(dstB, gid, 1);
