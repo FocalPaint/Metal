@@ -15,6 +15,8 @@ constant half EPSILON = 0.0002; // for some reason 0.0001 is too small, NaNs
 constant half offset = 1.0 - EPSILON;
 constant half EPSILON_LOG = -12.287712379549449;
 
+// this matrix brings us from spectral to (extended) sRGB primaries, which is required for Metal.
+// It's still P3 wide color, the values may be negative.
 constant half T_MATRIX [3][12] ={{0.043360489449518, 0.026456474761540, 0.020238299013514,
     -0.074764289932655, -0.170370642119887, -0.104586664428807,
     -0.086581468179310, -0.068906811339458, 0.457056404183395,
@@ -69,7 +71,6 @@ kernel void rgbToSpectral(texture2d <half, access::read> rgbTexture [[texture(0)
                           uint2 gid [[thread_position_in_grid]]) {
     half4 rgba = rgbTexture.read(gid);
     half4 greyRGBA = greyTexture.read(gid);
-    //half grey = dot(greyRGBA.rgb, displayP3Luma);
     half alpha = rgba.w;
     if (alpha > 0.0) {
         rgba /= alpha;
@@ -128,7 +129,6 @@ kernel void spectralToRGB(texture2d_array <half, access::read> spectralTexture [
     half4 srcS = spectralTexture.read(gid, 0);
     half4 srcM = spectralTexture.read(gid, 1);
     half4 srcL = spectralTexture.read(gid, 2);
-//    half4 srcMeta = spectralTexture.read(gid, 3);
     
     half4 S = (srcS);
     half4 M = (srcM);
@@ -146,13 +146,7 @@ kernel void spectralToRGB(texture2d_array <half, access::read> spectralTexture [
     
     
     // undo offset
-    
     half3 resColor = ((rgb - EPSILON) / offset);
-//    half alpha = srcMeta.x;
-//    if (alpha > 0.0 && alpha < 1.0) {
-//
-//        resColor /= alpha;
-//    }
     
     resColor = saturate(resColor);
     
@@ -173,12 +167,6 @@ kernel void spectralLogToRGB(texture2d_array <half, access::read> spectralTextur
     half4 srcS = spectralTexture.read(gid, 0);
     half4 srcM = spectralTexture.read(gid, 1);
     half4 srcL = spectralTexture.read(gid, 2);
-//    half4 srcMeta = spectralTexture.read(gid, 3);
-//    half alpha = srcMeta.x;
-//    if (alpha <= 0.0) {
-//
-//        alpha = 1.0;
-//    }
     
     // log to linear
     half4 S = exp2(srcS);
@@ -200,16 +188,9 @@ kernel void spectralLogToRGB(texture2d_array <half, access::read> spectralTextur
     
     half3 resColor = ((rgb - EPSILON) / offset);
     resColor = saturate(resColor);
-//    if (alpha > 0.0 && alpha < 1.0) {
-//
-//        resColor /= alpha;
-//    }
     
-    // apply alpha to pixels so that white=black, invert for normal programs.  Only means anything with background disabled
     half4 renderedPixel = half4(resColor, 1.0);
     rgbTexture.write(renderedPixel, gid); //write to render target
-
-    
     
 }
 
@@ -217,28 +198,25 @@ kernel void spectralLogToRGB(texture2d_array <half, access::read> spectralTextur
 
 
 kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
-                    constant DabMeta *DabMeta [[ buffer(1) ]],
+                    constant DabMeta *dabMeta [[ buffer(1) ]],
                     texture2d_array <half, access::read> canvas [[texture(0)]],
                     texture2d_array <half, access::read_write> smudgeBuckets [[texture(1)]],
                     uint2 gid [[thread_position_in_grid]]) {
 
 
-    int dabCount = DabMeta->dabCount;
-    
-    
-    //int bucketCount = DabMeta->bucketCount - 1;
+    int dabCount = dabMeta->dabCount;
 
-    for (int i=0; i < dabCount; i++) {
+    for (int dabIndex=0; dabIndex < dabCount; dabIndex++) {
         
-        half smudgeLength = dabArray[i].smudgeLength;
+        half smudgeLength = dabArray[dabIndex].smudgeLength;
         if (smudgeLength >= 1.0) continue;
         
-        half2 center = half2(dabArray[i].pos);
-        half dist = distance(half2(gid) + half2(DabMeta->texOrigin), center);
-        if (dist > dabArray[i].smudgeRadius) continue; // skip sampling beyond the smudge radius
+        half2 center = half2(dabArray[dabIndex].pos);
+        half dist = distance(half2(gid) + half2(dabMeta->texOrigin), center);
+        if (dist > dabArray[dabIndex].smudgeRadius) continue; // skip sampling beyond the smudge radius
         
         // bucket to update/average into
-        uint2 bucket = uint2(dabArray[i].smudgeBucket, 0);
+        uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
         
         half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
         // how recent this bucket was updated, break early
@@ -295,7 +273,6 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
 
 
 kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[texture(0)]],
-                         //constant float2 &bumpOpts [[ buffer(0) ]],
                          uint2 gid [[thread_position_in_grid]]) {
     
 
@@ -390,7 +367,7 @@ kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[tex
 
 kernel void reducePaint(texture2d_array <half, access::read> src [[texture(0)]],
                         texture2d_array <half, access::read_write> dst [[texture(1)]],
-                        //constant DabMeta *DabMeta [[ buffer(0) ]],
+                        //constant dabMeta *dabMeta [[ buffer(0) ]],
                         //constant float2 &bumpOpts [[ buffer(0) ]],
                         uint2 gid [[thread_position_in_grid]]) {
     
@@ -431,7 +408,7 @@ kernel void fillWithColor(constant ColorSample *fillColor [[ buffer(0) ]],
     
     dst.write(half4(fillColor->color[0]) + dstS, gid, 0);
     dst.write(half4(fillColor->color[1]) + dstM, gid, 1);
-    dst.write(half4(fillColor->color[1]) + dstL, gid, 2);
+    dst.write(half4(fillColor->color[2]) + dstL, gid, 2);
     
     
 }
@@ -561,6 +538,36 @@ kernel void drawRadialSweep(constant SpectralColorArray *spectralColorArray [[ b
     
 }
 
+static half drawEllipseForDab(float2 center, const constant Dab *dabArray, const constant DabMeta *dabMeta, uint2 gid, int dabIndex, half radius, half xOffset, half yOffset) {
+    half dist;
+    // draw ellipse and/or squircle shape
+    if ( dabArray[dabIndex].dabRatio < 1.0 || dabArray[dabIndex].dabShape > 0.0) {
+        // major and minor axis lengths
+        half a = pow((radius * half(dabArray[dabIndex].dabRatio)), half(2.0));
+        half b = pow((radius), half(2.0));
+        
+        half rotation = dabArray[dabIndex].dabAngle;
+        
+        // apply affine transform for rotation and offset
+        float x = xOffset * cos(rotation) + (yOffset) * sin(rotation);
+        float y = -1 * ((xOffset) * sin(rotation)) + (yOffset) * cos(rotation);
+        
+        // standard equation for ellipse == 1 if point is exactly on the ellipse perimeter
+        half distEllipse = (pow(x, 2.0) / a ) + (pow((y), (2.0)) / b);
+        
+        // squircle
+        half n = dabArray[dabIndex].dabShapeMod;
+        half distSquircle = max(half(0.0), half(pow(half(abs(x / (radius * dabArray[dabIndex].dabRatio))), n) + pow(half(abs(y / radius)), n)));
+        
+        // interpolate between ellipse and squircle shape
+        dist = (1.0 - dabArray[dabIndex].dabShape) * distEllipse + dabArray[dabIndex].dabShape * distSquircle;
+    } else {
+        // optimization for just a simple circle
+        dist = distance(float2(gid) + float2(dabMeta->texOrigin), center) / radius;
+    }
+    return dist;
+}
+
 
 // example custom shader, this "pushes" paint around based on the dab angle, which you can
 // control by mapping Stroke Direction or Azimuth, or whatever, to control.
@@ -610,79 +617,26 @@ kernel void customBrushShader(
   uint2 gid [[thread_position_in_grid]],
   uint tid [[thread_index_in_threadgroup]])
   {
-//      constexpr sampler s(coord::pixel,
-//                    address::clamp_to_edge,
-//                    filter::nearest);
-      
-//      if (gid.x == 0 || gid.y == 0 | gid.x >= canvas.get_width() - 1 || gid.y >= canvas.get_height() - 1) return;
-      
-      
-//      half4 middle[4];
-//      half4 left[4];
-//      half4 upperLeft[4];
-//      half4 up[4];
-//      half4 upperRight[4];
-//      half4 right[4];
-//      half4 lowerRight[4];
-//      half4 down[4];
-//      half4 lowerLeft[4];
-//
-//      int i;
-//      for (i = 0; i < 4; ++i) {
-//          middle[i] = canvas.read(gid, i);
-//          left[i] = canvas.read(uint2(int2(gid) - int2(1,0)), i);
-//          upperLeft[i] = canvas.read(uint2(int2(gid) - int2(1,1)), i);
-//          up[i] = canvas.read(uint2(int2(gid) - int2(0,1)), i);
-//          upperRight[i] = canvas.read(uint2(int2(gid) - int2(-1,1)), i);
-//          right[i] = canvas.read(uint2(int2(gid) - int2(-1,0)), i);
-//          lowerRight[i] = canvas.read(uint2(int2(gid) - int2(-1,-1)), i);
-//          down[i] = canvas.read(uint2(int2(gid) - int2(0,-1)), i);
-//          lowerLeft[i] = canvas.read(uint2(int2(gid) - int2(1,-1)), i);
-//      }
+
       
       // for each dab, do a bunch of stuff and store it in the dst
       int dabCount = dabMeta->dabCount;
-      for (int i=0; i < dabCount; ++i) {
+      for (int dabIndex=0; dabIndex < dabCount; ++dabIndex) {
           // center of the dab to draw
-          float2 center = (dabArray[i].pos);
+          float2 center = (dabArray[dabIndex].pos);
           // translate the position using the global texOrigin coordinates
           half xOffset = half(gid.x) + dabMeta->texOrigin.x - center.x;
           half yOffset = half(gid.y) + dabMeta->texOrigin.y - center.y;
-          half strength = dabArray[i].strength;
+          half strength = dabArray[dabIndex].strength;
           // radius of the dab to draw, in pixels
-          half radius = dabArray[i].radius;
+          half radius = dabArray[dabIndex].radius;
           // hardness is how much to feather the edge of a dab
-          half hardness = dabArray[i].hardness;
+          half hardness = dabArray[dabIndex].hardness;
           
-          half rotation = dabArray[i].dabAngle;
+          half rotation = dabArray[dabIndex].dabAngle;
           
           // use a signed distance field to draw the shape
-          half dist;
-          // draw ellipse and/or squircle shape
-          if ( dabArray[i].dabRatio < 1.0 || dabArray[i].dabShape > 0.0) {
-              // major and minor axis lengths
-              half a = pow((radius * half(dabArray[i].dabRatio)), half(2.0));
-              half b = pow((radius), half(2.0));
-
-              
-              
-              // apply affine transform for rotation and offset
-              float x = xOffset * cos(rotation) + (yOffset) * sin(rotation);
-              float y = -1 * ((xOffset) * sin(rotation)) + (yOffset) * cos(rotation);
-
-              // standard equation for ellipse == 1 if point is exactly on the ellipse perimeter
-              half distEllipse = (pow(x, 2.0) / a ) + (pow((y), (2.0)) / b);
-              
-              // squircle
-              half n = dabArray[i].dabShapeMod;
-              half distSquircle = max(half(0.0), half(pow(half(abs(x / (radius * dabArray[i].dabRatio))), n) + pow(half(abs(y / radius)), n)));
-
-              // interpolate between ellipse and squircle shape
-              dist = (1.0 - dabArray[i].dabShape) * distEllipse + dabArray[i].dabShape * distSquircle;
-          } else {
-              // optimization for just a simple circle
-              dist = distance(float2(gid) + float2(dabMeta->texOrigin), center) / radius;
-          }
+          half dist = drawEllipseForDab(center, dabArray, dabMeta, gid, dabIndex, radius, xOffset, yOffset);
           
           // if outside the ellipse, don't draw anything for this dab
           if (dist > 1.0 || dist < 0.0 || isnan(dist)) continue;
@@ -709,221 +663,201 @@ kernel void customBrushShader(
           blendCustom(middle, leading, trailing, strength);
           for (int i = 0; i < 4; ++i) {
             canvas.write(middle[i], gid, i);
-//            canvas.write(leading[i], uint2(int2(gid) - dir), i);
-//            canvas.write(trailing[i], uint2(int2(gid) - dirRev), i);
-//
           }
-         
-        
-//          }
-//
-//
-//          uint2 sample_coord_leading = uint2(float2(gid) + float2(dirRev));
-
-         // don’t draw or pull over empty area
- 
       }
-
-//      for (i = 0; i < 4; ++i) {
-//        canvas.write(middle[i], gid, i);
-//        canvas.write(left[i], uint2(int2(gid) - int2(1,0)), i);
-//        canvas.write(upperLeft[i], uint2(int2(gid) - int2(1,1)), i);
-//        canvas.write(up[i], uint2(int2(gid) - int2(0,1)), i);
-//        canvas.write(upperRight[i], uint2(int2(gid) - int2(-1,1)), i);
-//        canvas.write(right[i], uint2(int2(gid) - int2(-1,0)), i);
-//        canvas.write(lowerRight[i], uint2(int2(gid) - int2(-1,-1)), i);
-//        canvas.write(down[i], uint2(int2(gid) - int2(0,-1)), i);
-//        canvas.write(lowerLeft[i], uint2(int2(gid) - int2(1,-1)), i);
-//      }
-
 }
 
 
-//constant bool hasLowerTexture [[function_constant(0)]];
+// draw a normal dab
+static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const constant DabMeta *dabMeta, thread half4 &dstA, thread half4 &dstB, thread half4 &dstC, thread half4 &dstMeta, texture2d_array <half, access::read> lowerLayer, thread const texture2d_array<half, access::read> &smudgeBuckets, uint2 gid, uint tid) {
 
-kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
-                    constant DabMeta *DabMeta [[ buffer(1) ]],
-                    texture2d_array <half, access::read_write> activeLayer [[texture(0)]],
-                    texture2d_array <half, access::read> smudgeBuckets [[texture(1)]],
-                    texture2d_array <half, access::read> lowerLayer [[texture(2)]],
-                    texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
-                    uint2 gid [[thread_position_in_grid]],
-                    uint tid [[thread_index_in_threadgroup]]) {
+    // center of the dab to draw
+    float2 center = (dabArray[dabIndex].pos);
+    // translate the position using the global texOrigin coordinates
+    half xOffset = half(gid.x) + dabMeta->texOrigin.x - center.x;
+    half yOffset = half(gid.y) + dabMeta->texOrigin.y - center.y;
     
-    // read the active layer pixels into dstX
-    // we will modify this data repeatedly for each dab and write it back into the layer at the end
-    // our data format is 16 channels. 12 log2 color channels (first 3 textures) and a metadata texture
-    // metadata stores opacity, thickness, a thickness/opacity factor, and a "worked" factor
-    half4 dstA = activeLayer.read(gid, 0);
-    half4 dstB = activeLayer.read(gid, 1);
-    half4 dstC = activeLayer.read(gid, 2);
-    half4 dstMeta = activeLayer.read(gid, 3);
-    
-    // if there is a lower layer, read that in. We might use it
-    half4 lowerA, lowerB, lowerC, lowerMeta;
-    if (DabMeta->hasLowerTexture == 1) {
-        lowerA = lowerLayer.read(gid, 0);
-        lowerB = lowerLayer.read(gid, 1);
-        lowerC = lowerLayer.read(gid, 2);
-        lowerMeta = lowerLayer.read(gid, 3);
+    // coverage is either on or off for a pixel and is a % chance basically
+    // needs seeds to avoid obvious repeating noise
+    if (dabArray[dabIndex].dabCoverage < 1.0) {
+        half dabCoverageChance = rand(xOffset + tid, yOffset + tid, dabMeta->randomSeeds2.y);
+        if ( dabCoverageChance > dabArray[dabIndex].dabCoverage ) return;
     }
     
-    // for each dab, do a bunch of stuff and store it in the dst
-    int dabCount = DabMeta->dabCount;
-    for (int i=0; i < dabCount; i++) {
-        // center of the dab to draw
-        float2 center = (dabArray[i].pos);
-        // translate the position using the global texOrigin coordinates
-        half xOffset = half(gid.x) + DabMeta->texOrigin.x - center.x;
-        half yOffset = half(gid.y) + DabMeta->texOrigin.y - center.y;
-        
-        // coverage is either on or off for a pixel and is a % chance basically
-        // needs seeds to avoid obvious repeating noise
-        if (dabArray[i].dabCoverage < 1.0) {
-            half dabCoverageChance = rand(xOffset + tid, yOffset + tid, DabMeta->randomSeeds2.y);
-            if ( dabCoverageChance > dabArray[i].dabCoverage ) continue;
-        }
-        
-        // ratio of smudge bucket color to the brush color
-        // 1.0 will smear existing paint
-        half smudgeAmount = dabArray[i].smudgeAmount;
-        half invSmudgeAmount = 1.0 - smudgeAmount;
-        // opacity is opaqueness
-        // Partially opaque and thick paint will be darker
-        half opacity = clamp(half(dabArray[i].opacity),EPSILON, half(1.0));
-        // volume AKA thickness. Scale to 10.0 units
-        half volume = clamp(half(dabArray[i].volume * 10.0),EPSILON, half(10.0));
-        // strength is ultimately the ratio of brush to existing canvas ratio, even
-        // when erasing.  It's the strength of the effect of whatever you're doing.
-        half strength = dabArray[i].strength;
-        // radius of the dab to draw, in pixels
-        half radius = dabArray[i].radius;
-        // hardness is how much to feather the edge of a dab
-        half hardness = dabArray[i].hardness;
-        // eraser removes existing paint
-        half eraser = 1.0 - dabArray[i].eraser;
-        
-        // jitter the opacity
-        if (dabArray[i].opacityJitterChance > 0.0 && dabArray[i].opacityJitter > 0.0) {
-            half opacityJitterChance = rand(xOffset + tid, yOffset + tid, DabMeta->randomSeeds.x);
-            if ( opacityJitterChance < dabArray[i].opacityJitterChance) opacity *= max(half(1.0 - dabArray[i].opacityJitter), opacityJitterChance);
-        }
-        
-        // jitter smudge
-        if (dabArray[i].smudgeJitterChance > 0.0 && dabArray[i].smudgeJitter > 0.0) {
-            half smudgeJitterChance = rand(yOffset + tid, xOffset + tid, DabMeta->randomSeeds.y);
-            if (( smudgeJitterChance < dabArray[i].smudgeJitterChance )) smudgeAmount *= max(half(1.0 - dabArray[i].smudgeJitter), smudgeJitterChance);
-        }
+    // ratio of smudge bucket color to the brush color
+    // 1.0 will smear existing paint
+    half smudgeAmount = dabArray[dabIndex].smudgeAmount;
+    
+    // opacity is opaqueness
+    // Partially opaque and thick paint will be darker
+    half opacity = clamp(half(dabArray[dabIndex].opacity),EPSILON, half(1.0));
+    // volume AKA thickness. Scale to 10.0 units
+    half volume = clamp(half(dabArray[dabIndex].volume),EPSILON, half(10.0));
+    // strength is ultimately the ratio of brush to existing canvas ratio, even
+    // when erasing.  It's the strength of the effect of whatever you're doing.
+    half strength = dabArray[dabIndex].strength;
+    // radius of the dab to draw, in pixels
+    half radius = dabArray[dabIndex].radius;
+    // hardness is how much to feather the edge of a dab
+    half hardness = dabArray[dabIndex].hardness;
+    // eraser removes existing paint and thickness
+    half eraser = 1.0 - (dabArray[dabIndex].eraser);
+    
+    // jitter the opacity
+    if (dabArray[dabIndex].opacityJitterChance > 0.0 && dabArray[dabIndex].opacityJitter > 0.0) {
+        half opacityJitterChance = rand(xOffset + tid, yOffset + tid, dabMeta->randomSeeds.x);
+        if ( opacityJitterChance < dabArray[dabIndex].opacityJitterChance) opacity *= max(half(1.0 - dabArray[dabIndex].opacityJitter), opacityJitterChance);
+    }
+    
+    // jitter smudge
+    if (dabArray[dabIndex].smudgeJitterChance > 0.0 && dabArray[dabIndex].smudgeJitter > 0.0) {
+        half smudgeJitterChance = rand(yOffset + tid, xOffset + tid, dabMeta->randomSeeds.y);
+        if (( smudgeJitterChance < dabArray[dabIndex].smudgeJitterChance )) smudgeAmount *= max(half(1.0 - dabArray[dabIndex].smudgeJitter), smudgeJitterChance);
+    }
+    
+    // use a signed distance field to draw the shape
+    half dist = drawEllipseForDab(center, dabArray, dabMeta, gid, dabIndex, radius, xOffset, yOffset);
+    
+    // if outside the ellipse, don't draw anything for this dab
+    if (dist > 1.0 || dist < 0.0 || isnan(dist)) return;
+    // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
+    strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
+    half strengthInv = (1.0 - strength);
+    half eraserStrength = 1.0 - (dabArray[dabIndex].eraser * strength);
 
-        // use a signed distance field to draw the shape
-        half dist;
-        // draw ellipse and/or squircle shape
-        if ( dabArray[i].dabRatio < 1.0 || dabArray[i].dabShape > 0.0) {
-            // major and minor axis lengths
-            half a = pow((radius * half(dabArray[i].dabRatio)), half(2.0));
-            half b = pow((radius), half(2.0));
+    strength *= eraser;
+    half invSmudgeAmount = (1.0 - smudgeAmount);
+    
 
-            half rotation = dabArray[i].dabAngle;
+    // Smudge Bucket is just a small texture that stores
+    // a bunch of colors that can be recalled on a per-dab
+    // basis. Kind of good for matching bristles to their
+    // own smudge color
+    uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
+    half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
+    
+    // This is weird and basically tries to uhh only paint when
+    // the smudge bucket thickness state is below or above the desired value
+    // I don't even know why I made this
+    half smudgeThicknessThreshold = dabArray[dabIndex].smudgeThicknessThreshold;
+    if ((smudgeThicknessThreshold > 0.0 && smudgeBucketD.y < smudgeThicknessThreshold) || (smudgeThicknessThreshold < 0.0 && smudgeBucketD.y > 1.0 - -smudgeThicknessThreshold)) {
+        return;
+    }
+        
+    // jitter the volume/thickness
+    if (dabArray[dabIndex].volumeJitterChance > 0.0) {
+        half volumeJitterChance = rand(yOffset + tid, xOffset + tid, dabMeta->randomSeeds2.x);
+        if (( volumeJitterChance < dabArray[dabIndex].volumeJitterChance )) volume *= max(half(1.0 - dabArray[dabIndex].volumeJitter), volumeJitterChance);
+    }
+    
+    
+    half4 smudgeBucketA = smudgeBuckets.read(bucket, 0);
+    half4 smudgeBucketB = smudgeBuckets.read(bucket, 1);
+    half4 smudgeBucketC = smudgeBuckets.read(bucket, 2);
+    
+    
+    // if there is a layer below the active layer, we might want
+    // to interact with it somehow (read-only). Here we lift paint
+    // up from the lower layer and mix it with the smudge color
+    // but only if our paint is a solvent and can disolve it
+    if (dabMeta->hasLowerTexture == 1) {
+        half4 lowerA = lowerLayer.read(gid, 0);
+        half4 lowerB = lowerLayer.read(gid, 1);
+        half4 lowerC = lowerLayer.read(gid, 2);
+        half4 lowerMeta = lowerLayer.read(gid, 3);
+        
+        half liftFac = clamp((lowerMeta.y / 10.0) * dabArray[dabIndex].solvent, 0.0, 1.0);
+        smudgeBucketA = smudgeBucketA * (1.0 - liftFac) + lowerA * liftFac;
+        smudgeBucketB = smudgeBucketB * (1.0 - liftFac) + lowerB * liftFac;
+        smudgeBucketC = smudgeBucketC * (1.0 - liftFac) + lowerC * liftFac;
+        smudgeBucketD = smudgeBucketD * (1.0 - liftFac) + lowerMeta * liftFac;
+    }
+    
+    
+    // calculate volume/thickness
+    half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume)) * strength;
+    half volumeBottom = strengthInv * dstMeta.y;
+    half volumeResult = eraserStrength * clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
+    
+    
+    // this is less weird than smudgeThicknessThreshold.
+    // Don't paint if the brush thickness is going to add less than what is already on the canvas
+    half thicknessThreshold = dabArray[dabIndex].thicknessThreshold * eraser;
+    if (volumeTop < thicknessThreshold * dstMeta.y) {
+        return;
+    }
+    
+    
+    
+    
+  
+    
+    // calculate opacity before applying thickness
+    half topOpacity = (smudgeAmount * smudgeBucketD.x + invSmudgeAmount * opacity) * strength;
+    half bottomOpacity = strengthInv * dstMeta.x;
+    half opacityResult =  eraserStrength * (topOpacity + bottomOpacity);
+    
+    // apply beer-lambert-like multiplier to the color based on opacity and thickness
+    half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
+    
+    
+    half workedAmount = eraserStrength * clamp(half(strength * (dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness)) +  dstMeta.w), half(0.0), half(1000.0));
+    half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
+    half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
+    
+    // brush color, 12 channels, remember?
+    // log2 encoded
+    half4 color0 = half4(dabArray[dabIndex].color[0]);
+    half4 color1 = half4(dabArray[dabIndex].color[1]);
+    half4 color2 = half4(dabArray[dabIndex].color[2]);
+    
+    
+    // jitter the color channels left or right
+    if ( dabArray[dabIndex].colorJitter != 0.0 && dabArray[dabIndex].colorJitterChance > 0.0) {
+        
+        half colorJitterChance = rand(yOffset + tid, xOffset + tid, dabMeta->randomSeeds.w);
+        half colorJitter = dabArray[dabIndex].colorJitter * colorJitterChance;
+        
+        if (colorJitterChance < dabArray[dabIndex].colorJitterChance) {
+            if (colorJitter > 0.0) {
+                
+                half invColorJitter = 1.0 - colorJitter;
+                for (uint i=0; i < 3; i++) {
+                    color0[i] = color0[i] * invColorJitter + colorJitter * color0[i + 1];
+                    color1[i] = color1[i] * invColorJitter + colorJitter * color1[i + 1];
+                    color2[i] = color2[i] * invColorJitter + colorJitter * color2[i + 1];
+                }
+                color0[3] = color0[3] * invColorJitter + colorJitter * color1[0];
+                color1[3] = color1[3] * invColorJitter + colorJitter * color2[0];
+                color2[3] = color2[3] * invColorJitter + colorJitter * color0[0];
+                
+            } else if (colorJitter < 0.0) {
+                colorJitter = -colorJitter;
+                half invColorJitter = 1.0 - colorJitter;
+                for (uint i=3; i > 0; i--) {
+                    color0[i] = color0[i] * invColorJitter + colorJitter * color0[i - 1];
+                    color1[i] = color1[i] * invColorJitter + colorJitter * color1[i - 1];
+                    color2[i] = color2[i] * invColorJitter + colorJitter * color2[i - 1];
+                }
+                color0[0] = color0[0] * invColorJitter + colorJitter * color2[3];
+                color1[0] = color1[0] * invColorJitter + colorJitter * color0[3];
+                color2[0] = color2[0] * invColorJitter + colorJitter * color1[3];
+            }
+        }
+        
+        if ( dabArray[dabIndex].valueJitter != 0.0 && dabArray[dabIndex].valueJitterChance > 0.0) {
+            half valueJitterChance = 1.0 - rand(xOffset + tid, yOffset + tid, dabMeta->randomSeeds.y);
+            half valueJitter =  dabArray[dabIndex].valueJitter * valueJitterChance;
             
-            // apply affine transform for rotation and offset
-            float x = xOffset * cos(rotation) + (yOffset) * sin(rotation);
-            float y = -1 * ((xOffset) * sin(rotation)) + (yOffset) * cos(rotation);
-
-            // standard equation for ellipse == 1 if point is exactly on the ellipse perimeter
-            half distEllipse = (pow(x, 2.0) / a ) + (pow((y), (2.0)) / b);
-            
-            // squircle
-            half n = dabArray[i].dabShapeMod;
-            half distSquircle = max(half(0.0), half(pow(half(abs(x / (radius * dabArray[i].dabRatio))), n) + pow(half(abs(y / radius)), n)));
-
-            // interpolate between ellipse and squircle shape
-            dist = (1.0 - dabArray[i].dabShape) * distEllipse + dabArray[i].dabShape * distSquircle;
-        } else {
-            // optimization for just a simple circle
-            dist = distance(float2(gid) + float2(DabMeta->texOrigin), center) / radius;
-        }
-        
-        // if outside the ellipse, don't draw anything for this dab
-        if (dist > 1.0 || dist < 0.0 || isnan(dist)) continue;
-        // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
-        strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
-        half strengthInv = 1.0 - strength;
-        
-        // Smudge Bucket is just a small texture that stores
-        // a bunch of colors that can be recalled on a per-dab
-        // basis. Kind of good for matching bristles to their
-        // own smudge color
-        uint2 bucket = uint2(dabArray[i].smudgeBucket, 0);
-        half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
-        
-        // This is weird and basically tries to uhh only paint when
-        // the smudge bucket state is below or above the desired value
-        // I don't even know why I made this
-        half smudgeThicknessThreshold = dabArray[i].smudgeThicknessThreshold;
-        if ((smudgeThicknessThreshold > 0.0 && smudgeBucketD.y < smudgeThicknessThreshold) || (smudgeThicknessThreshold < 0.0 && smudgeBucketD.y > 1.0 - -smudgeThicknessThreshold)) {
-            continue;
-        }
-        half4 smudgeBucketA = smudgeBuckets.read(bucket, 0);
-        half4 smudgeBucketB = smudgeBuckets.read(bucket, 1);
-        half4 smudgeBucketC = smudgeBuckets.read(bucket, 2);
-        
-        
-        // if there is a layer below the active layer, we might want
-        // to interact with it somehow (read-only). Here we lift paint
-        // up from the lower layer and mix it with the smudge color
-        // but only if our paint is a solvent and can disolve it
-        if (DabMeta->hasLowerTexture == 1) {
-            // lowerMeta.y is volume/thickness
-            half liftFac = lowerMeta.y * dabArray[i].solvent * 0.01;
-            smudgeBucketA = smudgeBucketA * (1.0 - liftFac) + lowerA * liftFac;
-            smudgeBucketB = smudgeBucketB * (1.0 - liftFac) + lowerB * liftFac;
-            smudgeBucketC = smudgeBucketC * (1.0 - liftFac) + lowerC * liftFac;
-            smudgeBucketD = smudgeBucketD * (1.0 - liftFac) + lowerMeta * liftFac;
-        }
-        
-        // jitter the volume/thickness
-        if (dabArray[i].volumeJitterChance > 0.0) {
-            half volumeJitterChance = rand(yOffset + tid, xOffset + tid, DabMeta->randomSeeds2.x);
-            if (( volumeJitterChance < dabArray[i].volumeJitterChance )) volume *= max(half(1.0 - dabArray[i].volumeJitter), volumeJitterChance);
-        }
-        
-        // calculate volume/thickness
-        half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume * eraser)) * strength;
-        half volumeBottom =  strengthInv * dstMeta.y;
-        half volumeResult = volumeTop + volumeBottom;
-        
-        // calculate opacity before applying thickness
-        half topOpacity = (smudgeAmount * smudgeBucketD.x + invSmudgeAmount * opacity * eraser);
-        half bottomOpacity = strengthInv * dstMeta.x;
-        half opacityResult =  topOpacity * strength + bottomOpacity;
-        
-        // apply beer-lambert-like multiplier to the color based on opacity and thickness
-        half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
-        
-        
-        half workedAmount = eraser * clamp(half(strength * dabArray[i].pressure + dstMeta.w + (strength * 10 * dabArray[i].wetness)), half(0.0), half(1000.0));
-        half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + (1.0 - smudgeAmount) * beerMultiplier * eraser) * strength;
-        half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
-        
-        // brush color, 12 channels, remember?
-        // log2 encoded
-        half4 color0 = half4(dabArray[i].color[0]);
-        half4 color1 = half4(dabArray[i].color[1]);
-        half4 color2 = half4(dabArray[i].color[2]);
-        
-        if ( dabArray[i].valueJitter != 0.0 && dabArray[i].valueJitterChance > 0.0) {
-            half valueJitterChance = 1.0 - rand(xOffset + tid, yOffset + tid, DabMeta->randomSeeds.y);
-            half valueJitter =  dabArray[i].valueJitter * valueJitterChance;
-            
-            if (valueJitterChance <= dabArray[i].valueJitterChance) {
-
+            if (valueJitterChance <= dabArray[dabIndex].valueJitterChance) {
+                
                 if (valueJitter < 0.0 ) {
                     valueJitter = -valueJitter;
                     for (uint i=0; i < 4; i++) {
                         color0[i] = max(EPSILON_LOG, color0[i] + valueJitter * EPSILON_LOG);
                         color1[i] = max(EPSILON_LOG, color1[i] + valueJitter * EPSILON_LOG);
                         color2[i] = max(EPSILON_LOG, color2[i] + valueJitter * EPSILON_LOG);
-                       
+                        
                     }
                 } else {
                     valueJitter = 1.0 - valueJitter;
@@ -936,49 +870,54 @@ kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
             }
         }
         
-        if ( dabArray[i].colorJitter != 0.0 && dabArray[i].colorJitterChance > 0.0) {
-            
-            half colorJitterChance = rand(yOffset + tid, xOffset + tid, DabMeta->randomSeeds.w);
-            half colorJitter = dabArray[i].colorJitter * colorJitterChance;
-            
-            if (colorJitterChance < dabArray[i].colorJitterChance) {
-                if (colorJitter > 0.0) {
-                    
-                    half invColorJitter = 1.0 - colorJitter;
-                    for (uint i=0; i < 3; i++) {
-                        color0[i] = color0[i] * invColorJitter + colorJitter * color0[i + 1];
-                        color1[i] = color1[i] * invColorJitter + colorJitter * color1[i + 1];
-                        color2[i] = color2[i] * invColorJitter + colorJitter * color2[i + 1];
-                    }
-                    color0[3] = color0[3] * invColorJitter + colorJitter * color1[0];
-                    color1[3] = color1[3] * invColorJitter + colorJitter * color2[0];
-                    color2[3] = color2[3] * invColorJitter + colorJitter * color0[0];
-                
-                } else if (colorJitter < 0.0) {
-                    colorJitter = -colorJitter;
-                    half invColorJitter = 1.0 - colorJitter;
-                    for (uint i=3; i > 0; i--) {
-                        color0[i] = color0[i] * invColorJitter + colorJitter * color0[i - 1];
-                        color1[i] = color1[i] * invColorJitter + colorJitter * color1[i - 1];
-                        color2[i] = color2[i] * invColorJitter + colorJitter * color2[i - 1];
-                    }
-                    color0[0] = color0[0] * invColorJitter + colorJitter * color2[3];
-                    color1[0] = color1[0] * invColorJitter + colorJitter * color0[3];
-                    color2[0] = color2[0] * invColorJitter + colorJitter * color1[3];
-                }
-            }
-            
-        }
+    }
+    
+    // combine smudge, brush color,
+    half4 colorA = (smudgeAmount * smudgeBucketA + invSmudgeAmount * color0 * beerMultiplier) * strength;
+    half4 colorB = (smudgeAmount * smudgeBucketB + invSmudgeAmount * color1 * beerMultiplier) * strength;
+    half4 colorC = (smudgeAmount * smudgeBucketC + invSmudgeAmount * color2 * beerMultiplier) * strength;
+    
+    dstA = colorA + strengthInv * dstA;
+    dstB = colorB + strengthInv * dstB;
+    dstC = colorC + strengthInv * dstC;
+    dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, workedAmount);
+}
 
-        // combine smudge, brush color,
-        half4 colorA = (smudgeAmount * smudgeBucketA + (1.0 - smudgeAmount) * color0 * beerMultiplier * eraser) * strength;
-        half4 colorB = (smudgeAmount * smudgeBucketB + (1.0 - smudgeAmount)  * color1 * beerMultiplier * eraser) * strength;
-        half4 colorC = (smudgeAmount * smudgeBucketC + (1.0 - smudgeAmount)  * color2 * beerMultiplier * eraser) * strength;
-       
-        dstA = colorA + strengthInv * dstA;
-        dstB =  colorB + strengthInv * dstB;
-        dstC =  colorC + strengthInv * dstC;
-        dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, workedAmount);
+//constant bool hasLowerTexture [[function_constant(0)]];
+
+kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
+                    constant DabMeta *dabMeta [[ buffer(1) ]],
+                    texture2d_array <half, access::read_write> activeLayer [[texture(0)]],
+                    texture2d_array <half, access::read> smudgeBuckets [[texture(1)]],
+                    texture2d_array <half, access::read> lowerLayer [[texture(2)]],
+                    texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
+                    uint2 gid [[thread_position_in_grid]],
+                    uint tid [[thread_index_in_threadgroup]]) {
+    
+    // read the active layer pixels into dstX
+    // we will modify this data repeatedly for each dab and write it back into the layer at the end
+    // our data format is 16 channels. 12 log2 color channels (first 3 textures) and a metadata texture
+    // metadata stores opacity, thickness, a thickness/opacity factor, and a "worked" factor that negates the
+    // background texture tooth effects
+    half4 dstA = activeLayer.read(gid, 0);
+    half4 dstB = activeLayer.read(gid, 1);
+    half4 dstC = activeLayer.read(gid, 2);
+    half4 dstMeta = activeLayer.read(gid, 3);
+    
+//    half4 lowerA, lowerB, lowerC, lowerMeta;
+//    if (dabMeta->hasLowerTexture == 1) {
+//        // if there is a lower layer, read that in. We might use it
+//
+//        lowerA = lowerLayer.read(gid, 0);
+//        lowerB = lowerLayer.read(gid, 1);
+//        lowerC = lowerLayer.read(gid, 2);
+//        lowerMeta = lowerLayer.read(gid, 3);
+//    }
+    
+    // for each dab, do a bunch of stuff and store it in the dst
+    int dabCount = dabMeta->dabCount;
+    for (int dabIndex=0; dabIndex < dabCount; dabIndex++) {
+        drawNormalDab(dabArray, dabIndex, dabMeta, dstA, dstB, dstC, dstMeta, lowerLayer, smudgeBuckets, gid, tid);
     }
     activeLayer.write(dstA, gid, 0);
     activeLayer.write(dstB, gid, 1);
@@ -1012,7 +951,7 @@ kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
     srcL = min(srcL, 0.0) * overOp.srcThickness + dstAndLayerOpacity * min(dstL, 0.0);
 
     half opacity = srcAndLayerOpacity + dstMeta.x * dstAndLayerOpacity;// - (srcAndLayerOpacity * dstAndLayerOpacity);
-    // max out volume at 20.0 so that things aren't bumpy forever w/ many layers
+    // max out volume at 10.0 so that things aren't bumpy forever w/ many layers
     half volume = clamp((srcThickness + dstThickness), half(0.0), half(10.0));
 
     
