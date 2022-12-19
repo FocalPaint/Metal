@@ -6,6 +6,7 @@
 //
 
 #include <metal_stdlib>
+#include <metal_relational>
 #include "ShaderDefinitions.h"
 using namespace metal;
 
@@ -258,11 +259,17 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeBucketC = smudgeBucketC * smudgeLength + (1.0 - smudgeLength) * smudgeSampleC;
         smudgeBucketD = smudgeBucketD * smudgeLength + (1.0 - smudgeLength) * smudgeSampleD;
          
+        
+        if (any(isnan(smudgeBucketA)) || any(isnan(smudgeBucketD)) || any(isinf(smudgeBucketA)) || any(isinf(smudgeBucketD))) {
+            return;
+        }
+        
         smudgeBuckets.write(smudgeBucketA, bucket, 0);
         smudgeBuckets.write(smudgeBucketB, bucket, 1);
         smudgeBuckets.write(smudgeBucketC, bucket, 2);
         
         // use recentness for w channel instead of "worked"
+
         smudgeBuckets.write(half4(smudgeBucketD.x, smudgeBucketD.y, smudgeBucketD.z, recentness), bucket, 3);
         smudgeBuckets.fence();
         
@@ -918,6 +925,14 @@ kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
     int dabCount = dabMeta->dabCount;
     for (int dabIndex=0; dabIndex < dabCount; dabIndex++) {
         drawNormalDab(dabArray, dabIndex, dabMeta, dstA, dstB, dstC, dstMeta, lowerLayer, smudgeBuckets, gid, tid);
+    }
+    
+    if (any(isnan(dstA)) || any(isnan(dstA))
+        || any(isinf(dstB)) || any(isinf(dstB))
+        || any(isinf(dstC)) || any(isinf(dstC))
+        || any(isinf(dstMeta)) || any(isinf(dstMeta))
+        ) {
+        return;
     }
     activeLayer.write(dstA, gid, 0);
     activeLayer.write(dstB, gid, 1);
