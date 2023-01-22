@@ -24,6 +24,20 @@ struct SpectralColorArray {
     vector_float4 color[3];
 };
 
+struct SpectralColorSpace {
+    
+    // transformation matrix to get from
+    // spectral to device RGB (probably linear sRGB)
+    float T_MATRIX [3][12];
+    
+    // transform to XYZ
+    float XYZ_MATRIX [3][12];
+    
+    vector_float4 red[3];
+    vector_float4 green[3];
+    vector_float4 blue[3];
+};
+
 struct Dab {
     // color "reflectance" of pigment
     // 12 channels, log2 encoded

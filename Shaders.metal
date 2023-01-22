@@ -18,39 +18,39 @@ constant half EPSILON_LOG = -12.287712379549449;
 
 // this matrix brings us from spectral to (extended) sRGB primaries, which is required for Metal.
 // It's still P3 wide color, the values may be negative.
-constant half T_MATRIX [3][12] ={{0.043360489449518, 0.026456474761540, 0.020238299013514,
-    -0.074764289932655, -0.170370642119887, -0.104586664428807,
-    -0.086581468179310, -0.068906811339458, 0.457056404183395,
-    0.437453976232458, 0.431715004832538, 0.157869804779479},
-    {-0.040534472903886, -0.033419552329132, -0.029293045613806,
-    0.057466135999207, 0.192345371870075, 0.305415920318147,
-    0.293190243033650, 0.282447833359094, -0.000701733209694,
-        -0.015668249622555, -0.018679051015265, -0.015331520111816},
-    {0.309776255557529, 0.356528781924368, 0.344528004764383,
-    0.114183770252453, 0.016619897453525, -0.032036721687686,
-    -0.031625939891442, -0.031257924571711, -0.009110338431730,
-    -0.006870381924116, -0.006379347447639, -0.001282228702366}};
-
-constant half4 redShort = {0.000102347885217, 0.000101450240849, 0.000102203595088,
-    0.000182068610178};
-constant half4 redMedium = { 0.000335278671537, 0.000107101988920,
-    0.000235302112089, 0.000152926173608 };
-constant half4 redLong = { 0.678406822261829,
-    0.963465416215934, 0.925221300535300, 0.595455091698738 };
-
-constant half4 greenShort = { 0.000100517500654, 0.000100142149336, 0.000100230124224,
-    0.000100577314601};
-constant half4 greenMedium = { 0.979913754835688, 0.975279095060780,
-    0.979951868675621, 0.970116202772815 };
-constant half4 greenLong = { 0.274236729494797,
-    0.000238846302870, 0.031458970725383, 0.371961283042717 };
-
-constant half4 blueShort = { 0.979983032675131, 0.979938629678512, 0.979928904521242,
-    0.979683076599390 };
-constant half4 blueMedium = { 0.019743831047335, 0.054752823745413,
-    0.037082288916508, 0.047894730049648 };
-constant half4 blueLong = { 0.000100410422990,
-    0.000100262330692, 0.000101046193637, 0.002318893233423};
+//constant half T_MATRIX [3][12] ={{0.043360489449518, 0.026456474761540, 0.020238299013514,
+//    -0.074764289932655, -0.170370642119887, -0.104586664428807,
+//    -0.086581468179310, -0.068906811339458, 0.457056404183395,
+//    0.437453976232458, 0.431715004832538, 0.157869804779479},
+//    {-0.040534472903886, -0.033419552329132, -0.029293045613806,
+//    0.057466135999207, 0.192345371870075, 0.305415920318147,
+//    0.293190243033650, 0.282447833359094, -0.000701733209694,
+//        -0.015668249622555, -0.018679051015265, -0.015331520111816},
+//    {0.309776255557529, 0.356528781924368, 0.344528004764383,
+//    0.114183770252453, 0.016619897453525, -0.032036721687686,
+//    -0.031625939891442, -0.031257924571711, -0.009110338431730,
+//    -0.006870381924116, -0.006379347447639, -0.001282228702366}};
+//
+//constant half4 redShort = {0.000102347885217, 0.000101450240849, 0.000102203595088,
+//    0.000182068610178};
+//constant half4 redMedium = { 0.000335278671537, 0.000107101988920,
+//    0.000235302112089, 0.000152926173608 };
+//constant half4 redLong = { 0.678406822261829,
+//    0.963465416215934, 0.925221300535300, 0.595455091698738 };
+//
+//constant half4 greenShort = { 0.000100517500654, 0.000100142149336, 0.000100230124224,
+//    0.000100577314601};
+//constant half4 greenMedium = { 0.979913754835688, 0.975279095060780,
+//    0.979951868675621, 0.970116202772815 };
+//constant half4 greenLong = { 0.274236729494797,
+//    0.000238846302870, 0.031458970725383, 0.371961283042717 };
+//
+//constant half4 blueShort = { 0.979983032675131, 0.979938629678512, 0.979928904521242,
+//    0.979683076599390 };
+//constant half4 blueMedium = { 0.019743831047335, 0.054752823745413,
+//    0.037082288916508, 0.047894730049648 };
+//constant half4 blueLong = { 0.000100410422990,
+//    0.000100262330692, 0.000101046193637, 0.002318893233423};
 
 
 struct VertexOut {
@@ -69,6 +69,7 @@ typedef struct
 kernel void rgbToSpectral(texture2d <half, access::read> rgbTexture [[texture(0)]],
                           texture2d_array <half, access::read_write> spectralTexture [[texture(1)]],
                           texture2d <half, access::read> greyTexture [[texture(2)]],
+                          constant SpectralColorSpace *colorSpace [[ buffer(0) ]],
                           uint2 gid [[thread_position_in_grid]]) {
     half4 rgba = rgbTexture.read(gid);
     half4 greyRGBA = greyTexture.read(gid);
@@ -82,22 +83,22 @@ kernel void rgbToSpectral(texture2d <half, access::read> rgbTexture [[texture(0)
     // if greyscale, just use that value for all channels
     // otherwise use color
     
-    half4 colorShort;
-    half4 colorMedium;
-    half4 colorLong;
+    float4 colorShort;
+    float4 colorMedium;
+    float4 colorLong;
     if ( rgba.x == rgba.y == rgba.z ) {
-        colorShort = half4(rgba.x, rgba.x, rgba.x, rgba.x );
-        colorMedium = half4(rgba.x, rgba.x, rgba.x, rgba.x );
-        colorLong = half4(rgba.x, rgba.x, rgba.x, rgba.x );
+        colorShort = float4(rgba.x, rgba.x, rgba.x, rgba.x );
+        colorMedium = float4(rgba.x, rgba.x, rgba.x, rgba.x );
+        colorLong = float4(rgba.x, rgba.x, rgba.x, rgba.x );
     } else {
-        colorShort = redShort * rgba.x + greenShort * rgba.y + blueShort * rgba.z;
-        colorMedium = redMedium * rgba.x + greenMedium * rgba.y + blueMedium * rgba.z;
-        colorLong = redLong * rgba.x + greenLong * rgba.y + blueLong * rgba.z;
+        colorShort = colorSpace->red[0] * rgba.x + colorSpace->green[0] * rgba.y + colorSpace->blue[0] * rgba.z;
+        colorMedium = colorSpace->red[1] * rgba.x + colorSpace->green[1] * rgba.y + colorSpace->blue[1] * rgba.z;
+        colorLong = colorSpace->red[2] * rgba.x + colorSpace->green[2] * rgba.y + colorSpace->blue[2] * rgba.z;
     }
     
-    spectralTexture.write(log2(colorShort) * alpha, gid, 0);
-    spectralTexture.write(log2(colorMedium) * alpha, gid, 1);
-    spectralTexture.write(log2(colorLong) * alpha, gid, 2);
+    spectralTexture.write(half4(log2(colorShort) * alpha), gid, 0);
+    spectralTexture.write(half4(log2(colorMedium) * alpha), gid, 1);
+    spectralTexture.write(half4(log2(colorLong) * alpha), gid, 2);
     spectralTexture.write(half4(alpha, max(greyRGBA.r, EPSILON), 1.0, 0.0), gid, 3);
     
 }
@@ -123,6 +124,7 @@ kernel void rgbToGreyscale(texture2d <half, access::read_write> rgbTexture [[tex
 // assume already linear spectral
 kernel void spectralToRGB(texture2d_array <half, access::read> spectralTexture [[texture(0)]],
                           texture2d <half, access::read_write> rgbTexture [[texture(1)]],
+                          constant SpectralColorSpace *colorSpace [[ buffer(0) ]],
                           uint2 gid [[thread_position_in_grid]]) {
 
     // read spectral array texture and write to an RGB texture with associated alpha
@@ -140,9 +142,9 @@ kernel void spectralToRGB(texture2d_array <half, access::read> spectralTexture [
     
     // convert back to RGB
     for (int i=0; i<12; i++) {
-        rgb[0] += T_MATRIX[0][i] * spd[i];
-        rgb[1] += T_MATRIX[1][i] * spd[i];
-        rgb[2] += T_MATRIX[2][i] * spd[i];
+        rgb[0] += colorSpace->T_MATRIX[0][i] * spd[i];
+        rgb[1] += colorSpace->T_MATRIX[1][i] * spd[i];
+        rgb[2] += colorSpace->T_MATRIX[2][i] * spd[i];
     }
     
     
@@ -161,6 +163,7 @@ kernel void spectralToRGB(texture2d_array <half, access::read> spectralTexture [
 
 kernel void spectralLogToRGB(texture2d_array <half, access::read> spectralTexture [[texture(0)]],
                           texture2d <half, access::read_write> rgbTexture [[texture(1)]],
+                          constant SpectralColorSpace *colorSpace [[ buffer(0) ]],
                           uint2 gid [[thread_position_in_grid]]) {
 
     // read spectral array texture and write to an RGB texture with associated alpha
@@ -179,9 +182,9 @@ kernel void spectralLogToRGB(texture2d_array <half, access::read> spectralTextur
     
     // convert back to RGB
     for (int i=0; i<12; i++) {
-        rgb[0] += T_MATRIX[0][i] * spd[i];
-        rgb[1] += T_MATRIX[1][i] * spd[i];
-        rgb[2] += T_MATRIX[2][i] * spd[i];
+        rgb[0] += colorSpace->T_MATRIX[0][i] * spd[i];
+        rgb[1] += colorSpace->T_MATRIX[1][i] * spd[i];
+        rgb[2] += colorSpace->T_MATRIX[2][i] * spd[i];
     }
     
     
