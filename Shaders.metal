@@ -151,7 +151,7 @@ kernel void spectralToRGB(texture2d_array <half, access::read> spectralTexture [
     // undo offset
     half3 resColor = ((rgb - EPSILON) / offset);
     
-    resColor = saturate(resColor);
+    //resColor = saturate(resColor);
     
     // apply alpha to pixels so that white=black, invert for normal programs.  Only means anything with background disabled
     half4 renderedPixel = half4(resColor, 1.0);
@@ -191,7 +191,7 @@ kernel void spectralLogToRGB(texture2d_array <half, access::read> spectralTextur
     // undo offset
     
     half3 resColor = ((rgb - EPSILON) / offset);
-    resColor = saturate(resColor);
+    //resColor = saturate(resColor);
     
     half4 renderedPixel = half4(resColor, 1.0);
     rgbTexture.write(renderedPixel, gid); //write to render target
