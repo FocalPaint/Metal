@@ -219,6 +219,22 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         half dist = distance(half2(gid) + half2(dabMeta->texOrigin), center);
         if (dist > dabArray[dabIndex].smudgeRadius) continue; // skip sampling beyond the smudge radius
         
+        half4 smudgeSampleD = 0;
+        smudgeSampleD = canvas.read(gid, 3);
+        
+        // Only smudge when canvas thickness is above or below a threshhold
+        half smudgeThicknessThreshold = dabArray[dabIndex].smudgeThicknessThreshold;
+        if (smudgeThicknessThreshold > 0.0 && smudgeSampleD.y / 10.0 < smudgeThicknessThreshold) {
+            //continue;
+            smudgeLength += (smudgeThicknessThreshold - smudgeSampleD.y / 10.0) ;
+        } else if (smudgeThicknessThreshold < 0.0 && smudgeSampleD.y / 10.0 < -smudgeThicknessThreshold) {
+            //continue;
+            smudgeLength += ( -smudgeThicknessThreshold - smudgeSampleD.y / 10.0) ;
+            
+        }
+        
+        smudgeLength = clamp(smudgeLength, half(0.0), half(1.0));
+        
         // bucket to update/average into
         uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
         
@@ -249,13 +265,16 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         half4 smudgeSampleA = 0;
         half4 smudgeSampleB = 0;
         half4 smudgeSampleC = 0;
-        half4 smudgeSampleD = 0;
+       
 
 
         smudgeSampleA = canvas.read(gid, 0);
         smudgeSampleB = canvas.read(gid, 1);
         smudgeSampleC = canvas.read(gid, 2);
-        smudgeSampleD = canvas.read(gid, 3);
+      
+        
+       
+        
         
         smudgeBucketA = smudgeBucketA * smudgeLength + (1.0 - smudgeLength) * smudgeSampleA;
         smudgeBucketB = smudgeBucketB * smudgeLength + (1.0 - smudgeLength) * smudgeSampleB;
@@ -284,16 +303,6 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
 
 kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[texture(0)]],
                          uint2 gid [[thread_position_in_grid]]) {
-    
-
-    //half4 cMeta = canvas.read(gid, 3);
-    //if (cMeta.x <= 0.0) return;
-    
-    //half alpha = cMeta.x;
-    
-    // log to linear
-    
-    // normalize then reassociate alpha after we're back in linear
     
     half4 cS = exp2(canvas.read(gid, 0));
     half4 cM = exp2(canvas.read(gid, 1));
@@ -737,7 +746,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half eraserStrength = 1.0 - (dabArray[dabIndex].eraser * strength);
     
     strength *= eraser;
-    half invSmudgeAmount = (1.0 - smudgeAmount);
+    
     
     
     // Smudge Bucket is just a small texture that stores
@@ -747,13 +756,10 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
     half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
     
-    // This is weird and basically tries to uhh only paint when
-    // the smudge bucket thickness state is below or above the desired value
-    // I don't even know why I made this
-    half smudgeThicknessThreshold = dabArray[dabIndex].smudgeThicknessThreshold;
-    if ((smudgeThicknessThreshold > 0.0 && smudgeBucketD.y < smudgeThicknessThreshold) || (smudgeThicknessThreshold < 0.0 && smudgeBucketD.y > 1.0 - -smudgeThicknessThreshold)) {
-        return;
-    }
+
+    
+    
+    half invSmudgeAmount = (1.0 - smudgeAmount);
     
     // jitter the volume/thickness
     if (dabArray[dabIndex].volumeJitterChance > 0.0) {
