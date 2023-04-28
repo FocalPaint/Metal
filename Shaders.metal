@@ -307,77 +307,130 @@ kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[tex
     half4 cS = exp2(canvas.read(gid, 0));
     half4 cM = exp2(canvas.read(gid, 1));
     half4 cL = exp2(canvas.read(gid, 2));
+    half4 cMeta = canvas.read(gid,3);
     
     half Gx = 0;
     half Gy = 0;
 
     // East
-    Gx -= canvas.read(gid - uint2(1, 0), 3).y * 2;
+    Gx -= canvas.read(gid - uint2(1, 0), 3).y * 20;
+    Gx -= canvas.read(gid - uint2(2, 0), 3).y * 10;
 
     // West
-    Gx += canvas.read(gid + uint2(1, 0), 3).y * 2;
+    Gx += canvas.read(gid + uint2(1, 0), 3).y * 20;
+    Gx += canvas.read(gid + uint2(1, 0), 3).y * 10;
+
     
     // North-East
-    Gx -= canvas.read(gid - uint2(0, 1) + uint2(1, 0), 3).y;
+    Gx -= canvas.read(gid - uint2(-1, 1), 3).y * 10;
+    Gx -= canvas.read(gid - uint2(-2, 2), 3).y * 5;
+    Gx -= canvas.read(gid - uint2(-2, 1), 3).y * 8;
+    Gx -= canvas.read(gid - uint2(-1, 2), 3).y * 4;
     
     // North-West
-    Gx += canvas.read(gid - uint2(1, 1), 3).y;
+    Gx += canvas.read(gid - uint2(1, 1), 3).y * 10;
+    Gx += canvas.read(gid - uint2(2, 2), 3).y * 5;
+    Gx += canvas.read(gid - uint2(2, 1), 3).y * 8;
+    Gx += canvas.read(gid - uint2(1, 2), 3).y * 4;
     
     // South-East
-    Gx -= canvas.read(gid + uint2(1, 1), 3).y;
+    Gx -= canvas.read(gid + uint2(1, 1), 3).y * 10;
+    Gx -= canvas.read(gid + uint2(2, 2), 3).y * 5;
+    Gx -= canvas.read(gid + uint2(2, 1), 3).y * 8;
+    Gx -= canvas.read(gid + uint2(1, 2), 3).y * 4;
     
     // South-West
-    Gx += canvas.read(gid + uint2(0, 1) - uint2(1, 0), 3).y;
-    
+    Gx += canvas.read(gid + uint2(-1, 1), 3).y * 10;
+    Gx += canvas.read(gid + uint2(-2, 2), 3).y * 5;
+    Gx += canvas.read(gid + uint2(-2, 1), 3).y * 8;
+    Gx += canvas.read(gid + uint2(-1, 2), 3).y * 4;
     
 
     // North
-    Gy -= canvas.read(gid - uint2(0, 1), 3).y * 2;
+    Gy -= canvas.read(gid - uint2(0, 1), 3).y * 20;
+    Gy -= canvas.read(gid - uint2(0, 2), 3).y * 10;
 
     // South
-    Gy += canvas.read(gid + uint2(0, 1), 3).y * 2;
+    Gy += canvas.read(gid + uint2(0, 1), 3).y * 20;
+    Gy += canvas.read(gid + uint2(0, 2), 3).y * 10;
     
     // North-East
-    Gy -= canvas.read(gid - uint2(0, 1) + uint2(1, 0), 3).y;
+    Gy -= canvas.read(gid - uint2(-1, 1), 3).y * 10;
+    Gy -= canvas.read(gid - uint2(-2, 2), 3).y * 5;
+    Gy -= canvas.read(gid - uint2(-1, 2), 3).y * 8;
+    Gy -= canvas.read(gid - uint2(-2, 1), 3).y * 4;
 
     // North-West
-    Gy -= canvas.read(gid - uint2(1, 1), 3).y;
+    Gy -= canvas.read(gid - uint2(1, 1), 3).y * 10;
+    Gy -= canvas.read(gid - uint2(2, 2), 3).y * 5;
+    Gy -= canvas.read(gid - uint2(1, 2), 3).y * 8;
+    Gy -= canvas.read(gid - uint2(2, 1), 3).y * 4;
 
     // South-East
-    Gy += canvas.read(gid + uint2(1, 1), 3).y;
+    Gy += canvas.read(gid + uint2(1, 1), 3).y * 10;
+    Gy += canvas.read(gid + uint2(2, 2), 3).y * 5;
+    Gy += canvas.read(gid + uint2(1, 2), 3).y * 8;
+    Gy += canvas.read(gid + uint2(2, 1), 3).y * 4;
 
     // South-West
-    Gy += canvas.read(gid + uint2(0, 1) - uint2(1, 0), 3).y;
+    Gy += canvas.read(gid + uint2(-1, 1), 3).y * 10;
+    Gy += canvas.read(gid + uint2(-2, 2), 3).y * 5;
+    Gy += canvas.read(gid + uint2(-1, 2), 3).y * 8;
+    Gy += canvas.read(gid + uint2(-2, 1), 3).y * 4;
     
+    // cook-torrance adapted from https://github.com/pboechat/cook_torrance/blob/master/LICENSE
+    float scale = 0.0025;
+    float3 normal = 0;
+    float3 lightDir = normalize(float3(0.3, 0.3, 1.0));
+    float3 viewDir = float3(0,0,1.0);
+    float F0 = 0.3;
+    float roughness = clamp(float(cMeta.w), 0.1, 1.0);
+    float k = 0.2;
+    normal.x = scale * Gx;
+    normal.y = scale * Gy;
+    normal.z = 1.0;
     
+    normal = normalize(normal);
+    float NdotL = dot(normal, lightDir);
     
-    const half Oren_rough = 0.5 ; //clamp(1.0 - cMeta.z, 0.0, 1.0);
-    const half Oren_A = 1.0 - 0.5 * (Oren_rough / (Oren_rough + 0.33));
-    const half Oren_B = 0.45 * (Oren_rough / (Oren_rough + 0.09));
-    const half Oren_exposure = 1.0 / Oren_A; // dumb hack to avoid darkening
-    //const half amp = cMeta.z / (cMeta.x > 0.0 ? cMeta.x : 1.0) + cMeta.y; // normalize bumpamp before using
+    float Rs = 0.0;
+    if (NdotL > 0) {
+        
+        float3 H = normalize(lightDir + viewDir);
+        float NdotH = max(0.0, dot(normal, H));
+        float NdotV = max(0.0, dot(normal, viewDir));
+        float VdotH = max(0.0, dot(lightDir, H));
 
-    const half slope = sqrt(Gx * Gx + Gy * Gy);
-    //slope = slope;// * amp;
-    //slope = clamp(amp * float(slope), 0.0, 2.0);
-    const half radians = atan2(Gx, Gy);
-    //half direction = smallest_angular_difference(radians * 180.0f / M_PI_F, 60.0) ;
-    const half direction = min((2 * M_PI_H) - abs(radians - 1), abs(radians - 1)) / M_PI_F; // direction normalized, 1 when SW, 0 when NE
-    const half degrees = atan(slope * direction);
-    const half specular = direction < 0.2 ? atan((1.0 - direction) * slope) : 0;
-    const half lambert = clamp((cos(degrees) * (Oren_A + (Oren_B * sin(degrees) * tan(degrees)))) * Oren_exposure, half(0.0), half(1.0)) * (1.0 + specular * 0.2);
+        // Fresnel reflectance
+        float F = pow(1.0 - VdotH, 5.0);
+        F *= (1.0 - F0);
+        F += F0;
 
-    if (lambert != 0.0) {
-        cS *= lambert;
-        cM *= lambert;
-        cL *= lambert;
+        // Microfacet distribution by Beckmann
+        float m_squared = roughness * roughness;
+        float r1 = 1.0 / (4.0 * m_squared * pow(NdotH, 4.0));
+        float r2 = (NdotH * NdotH - 1.0) / (m_squared * NdotH * NdotH);
+        float D = r1 * exp(r2);
 
+        // Geometric shadowing
+        float two_NdotH = 2.0 * NdotH;
+        float g1 = (two_NdotH * NdotV) / VdotH;
+        float g2 = (two_NdotH * NdotL) / VdotH;
+        float G = min(1.0, min(g1, g2));
+
+        Rs = (F * D * G) / (M_PI_F * NdotL * NdotV);
+        
+        cS = cS * NdotL + NdotL * cS * 1.0 * (k + Rs * (1.0 - k));
+        cM = cM * NdotL + NdotL * cM * 1.0 * (k + Rs * (1.0 - k));
+        cL = cL * NdotL + NdotL * cL * 1.0 * (k + Rs * (1.0 - k));
+        
     }
+    
+    
     
     canvas.write(cS, gid, 0);
     canvas.write(cM, gid, 1);
     canvas.write(cL, gid, 2);
-       // }
 }
 
 
@@ -396,7 +449,7 @@ kernel void reducePaint(texture2d_array <half, access::read> src [[texture(0)]],
     half4 dstMeta = dst.read(gid, 3);
     //half volume = dstMeta.x > 0.0 ? dstMeta.y / dstMeta.x : dstMeta.y;
     //half depth =  clamp(src.read(gid, 3).y + half(dstMeta.y / 2.0) + half(dstMeta.w / 10.0), half(0.0), half(1.0));
-    half depth =  clamp(src.read(gid, 3).y * half(10.0) + half(dstMeta.y / 5.0) + half(dstMeta.w / 10.0), half(0.0), half(1.0));
+    half depth =  clamp(src.read(gid, 3).y * half(10.0) + half(dstMeta.y / 5.0), half(0.0), half(1.0));
     //if (depth != 0.0) {
         dstS *= depth;
         dstM *= depth;
@@ -792,8 +845,8 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     
     
     // calculate volume/thickness
-    half volumeTop = (( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * volume)) * strength;
-    half volumeBottom = strengthInv * dstMeta.y;
+    half volumeTop = invSmudgeAmount * volume * strength;
+    half volumeBottom = ( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * dstMeta.y);
     half volumeResult = eraserStrength * clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
     
     
@@ -818,7 +871,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
     
     
-    half workedAmount = eraserStrength * clamp(half(strength * (dabArray[dabIndex].pressure + (10.0 * dabArray[dabIndex].wetness)) +  dstMeta.w), half(0.0), half(1000.0));
+    half roughness = eraserStrength * clamp(half(strength * (1.0 - dabArray[dabIndex].wetness) +  strengthInv * dstMeta.w), half(0.0), half(1.0));
     half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
     half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
     
@@ -903,7 +956,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     dstA = colorA + strengthInv * dstA;
     dstB = colorB + strengthInv * dstB;
     dstC = colorC + strengthInv * dstC;
-    dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, workedAmount);
+    dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, roughness);
 }
 
 //constant bool hasLowerTexture [[function_constant(0)]];
