@@ -308,7 +308,7 @@ kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[tex
     half4 cM = exp2(canvas.read(gid, 1));
     half4 cL = exp2(canvas.read(gid, 2));
     half4 cMeta = canvas.read(gid,3);
-    
+        
     half Gx = 0;
     half Gy = 0;
 
@@ -318,7 +318,7 @@ kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[tex
 
     // West
     Gx += canvas.read(gid + uint2(1, 0), 3).y * 20;
-    Gx += canvas.read(gid + uint2(1, 0), 3).y * 10;
+    Gx += canvas.read(gid + uint2(2, 0), 3).y * 10;
 
     
     // North-East
@@ -420,9 +420,9 @@ kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[tex
 
         Rs = (F * D * G) / (M_PI_F * NdotL * NdotV);
         
-        cS = cS * NdotL + NdotL * cS * 1.0 * (k + Rs * (1.0 - k));
-        cM = cM * NdotL + NdotL * cM * 1.0 * (k + Rs * (1.0 - k));
-        cL = cL * NdotL + NdotL * cL * 1.0 * (k + Rs * (1.0 - k));
+        cS = cS * NdotL + NdotL * cS * clamp(float(cMeta.y), 0.0, 0.5) * (k + Rs * (1.0 - k));
+        cM = cM * NdotL + NdotL * cM * clamp(float(cMeta.y), 0.0, 0.5) * (k + Rs * (1.0 - k));
+        cL = cL * NdotL + NdotL * cL * clamp(float(cMeta.y), 0.0, 0.5) * (k + Rs * (1.0 - k));
         
     }
     
