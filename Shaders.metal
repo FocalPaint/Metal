@@ -420,17 +420,18 @@ kernel void applyBumpMap(texture2d_array <half, access::read_write> canvas [[tex
 
         Rs = (F * D * G) / (M_PI_F * NdotL * NdotV);
         
-        cS = cS * NdotL + NdotL * cS * clamp(float(cMeta.y), 0.0, 0.5) * (k + Rs * (1.0 - k));
-        cM = cM * NdotL + NdotL * cM * clamp(float(cMeta.y), 0.0, 0.5) * (k + Rs * (1.0 - k));
-        cL = cL * NdotL + NdotL * cL * clamp(float(cMeta.y), 0.0, 0.5) * (k + Rs * (1.0 - k));
+        cS = cS * NdotL + NdotL * cMeta.x * clamp(float(cMeta.y), 0.0, 0.05) * (k + Rs * (1.0 - k));
+        cM = cM * NdotL + NdotL * cMeta.x * clamp(float(cMeta.y), 0.0, 0.05) * (k + Rs * (1.0 - k));
+        cL = cL * NdotL + NdotL * cMeta.x * clamp(float(cMeta.y), 0.0, 0.05) * (k + Rs * (1.0 - k));
         
     }
     
     
     
-    canvas.write(cS, gid, 0);
-    canvas.write(cM, gid, 1);
-    canvas.write(cL, gid, 2);
+    canvas.write(log2(cS), gid, 0);
+    canvas.write(log2(cM), gid, 1);
+    canvas.write(log2(cL), gid, 2);
+    
 }
 
 
@@ -871,7 +872,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
     
     
-    half roughness = eraserStrength * clamp(half(strength * (1.0 - dabArray[dabIndex].wetness) +  strengthInv * dstMeta.w), half(0.0), half(1.0));
+    half wetness = eraserStrength * clamp(half(strength * (1.0 - dabArray[dabIndex].wetness) +  strengthInv * dstMeta.w), half(0.0), half(1.0));
     half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
     half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
     
@@ -956,7 +957,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     dstA = colorA + strengthInv * dstA;
     dstB = colorB + strengthInv * dstB;
     dstC = colorC + strengthInv * dstC;
-    dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, roughness);
+    dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, wetness);
 }
 
 //constant bool hasLowerTexture [[function_constant(0)]];
@@ -1040,8 +1041,8 @@ kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
 
     
     half beerFac = (srcMeta.z * overOp.srcThickness + dstAndLayerOpacity * dstMeta.z);
-    half workedAmount = (srcMeta.w * srcAndLayerOpacity + dstMeta.w);
-    srcMeta = half4(clamp(opacity, half(0.0), half(1.0)), volume, beerFac, workedAmount);
+    half wetness = (srcMeta.w * srcAndLayerOpacity + dstAndLayerOpacity * dstMeta.w);
+    srcMeta = half4(clamp(opacity, half(0.0), half(1.0)), volume, beerFac, wetness);
     
     dst.write(srcS, gid, 0);
     dst.write(srcM, gid, 1);
