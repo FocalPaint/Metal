@@ -611,6 +611,88 @@ kernel void drawRadialSweep(constant SpectralColorArray *spectralColorArray [[ b
     
 }
 
+kernel void drawSquareSweep(constant SpectralColorArray *spectralColorArray [[ buffer(0) ]],
+                            constant vector_float2 &center [[ buffer(1) ]],
+                            constant float &radius [[ buffer(2) ]],
+                            constant float &slider [[ buffer(3) ]],
+                            constant uint &numColors [[ buffer (4) ]],
+                            constant float &satSlider [[ buffer(5) ]],
+                            constant uint &logEncoding [[ buffer(6)]],
+                            texture2d_array <half, access::read_write> wheelTexture [[ texture(0) ]],
+                            uint2 gid [[thread_position_in_grid]]){
+    
+//    float2 centerPos = float2(center);
+    //float sliderVal = max(float(EPSILON), smoothstep(0.0, 1.0, slider));
+    //float dist = clamp(distance(centerPos, float2(gid)) / float(radius * 0.90), float(0.0), float(1.0));
+    float distX = 1.0 - clamp((wheelTexture.get_width() - float(gid.x)) / wheelTexture.get_width(), float(0.0), float(1.0));
+    float distY = 1.0 -clamp((wheelTexture.get_height() - float(gid.y)) / wheelTexture.get_height(), float(0.0), float(1.0));
+    
+    half4 blackness;
+    
+//    if (logEncoding == 1) {
+//        //dist = pow(smoothstep(0.0, 1.0, dist), 2.0);
+//        
+//        grey = log2(half4(distX, distX, distX, distX));
+//        
+//    } else {
+        //dist = pow(smoothstep(0.0, 1.0, dist), 2.0);
+//    distY = pow(smoothstep(0.0, 1.0, distY), 2.0);
+//    distX = pow(smoothstep(0.0, 1.0, distX), 2.0);
+
+    
+    
+    blackness = (half4(EPSILON_LOG, EPSILON_LOG, EPSILON_LOG, EPSILON_LOG))  * pow(distY, 1.0) * pow(distX, 1.0);
+//    half whiteness = clamp(((pow(distX, 1.0) + pow(distY, 1.0))) , 0.0, 1.0);
+    half whiteness = clamp(((pow(distX, 1.0) + pow(distY, 1.0))) / 2.0 , 0.0, 1.0);
+
+    half greyRatio = clamp((1.0 - distX), 0.0, 1.0);
+    half grey = max(half(pow(slider, 2.0)), EPSILON);
+    half4 greyness = log2((half4(grey, grey, grey, grey))) * greyRatio;
+
+    
+//    }
+    
+    float colorIndex = 0;
+    
+    
+    colorIndex = clamp(satSlider == 1 ? 0.0 : satSlider, 0.0, 1.0) * (numColors);
+    //half remainder;
+//    float rem;
+////    if (logEncoding == 1) {
+    float rem = fract(colorIndex);
+//    } else {
+//        rem = fract(colorIndex);
+//    }
+    uint colorIndexAdjacent = uint(colorIndex) + 1;
+
+    
+    if (colorIndexAdjacent >= uint(numColors)) {
+        colorIndexAdjacent = 0;
+    }
+    
+    half4 col1 = (half4(spectralColorArray[int(colorIndex)].color[0]) *
+        (1.0 - rem)) + (rem * half4(spectralColorArray[colorIndexAdjacent].color[0]));
+    
+    half4 col2 = (half4(spectralColorArray[int(colorIndex)].color[1]) *
+        (1.0 - rem)) + (rem * half4(spectralColorArray[colorIndexAdjacent].color[1]));
+    
+    half4 col3 = (half4(spectralColorArray[int(colorIndex)].color[2]) *
+        (1.0 - rem)) + (rem * half4(spectralColorArray[colorIndexAdjacent].color[2]));
+    
+//    if (logEncoding == 1) {
+    wheelTexture.write(min( ((col1 + blackness) * (1.0 - greyRatio) + greyness ) * whiteness, 0.0), gid, 0);
+    wheelTexture.write(min( ((col2 + blackness) * (1.0 - greyRatio) + greyness ) * whiteness, 0.0), gid, 1);
+    wheelTexture.write(min( ((col3 + blackness) * (1.0 - greyRatio) + greyness ) * whiteness, 0.0), gid, 2);
+//    } else {
+//        wheelTexture.write((col1 + pow((1.0 - satSlider), 2.5)) * dist + grey, gid, 0);
+//        wheelTexture.write((col2 + pow((1.0 - satSlider), 2.5)) * dist + grey, gid, 1);
+//        wheelTexture.write((col3 + pow((1.0 - satSlider), 2.5)) * dist + grey, gid, 2);
+//    }
+    
+    wheelTexture.write(half4(1,1,1,1), gid, 3);
+    
+}
+
 static half drawEllipseForDab(float2 center, const constant Dab *dabArray, const constant DabMeta *dabMeta, uint2 gid, int dabIndex, half radius, half xOffset, half yOffset) {
     half dist;
     // draw ellipse and/or squircle shape
