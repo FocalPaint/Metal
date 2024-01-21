@@ -556,7 +556,7 @@ kernel void drawRadialSweep(constant SpectralColorArray *spectralColorArray [[ b
     
     half4 grey;
     
-    if (logEncoding == 1) {
+    if (logEncoding >= 1) {
         dist = pow(smoothstep(0.0, 1.0, dist), 2.0);
         
         grey = log2(half4(sliderVal, sliderVal, sliderVal, sliderVal)) * (1.0 - dist);
@@ -597,7 +597,7 @@ kernel void drawRadialSweep(constant SpectralColorArray *spectralColorArray [[ b
     half4 col3 = (half4(spectralColorArray[int(colorIndex)].color[2]) *
         (1.0 - rem)) + (rem * half4(spectralColorArray[colorIndexAdjacent].color[2]));
     
-    if (logEncoding == 1) {
+    if (logEncoding >= 1) {
         wheelTexture.write((col1 * satSlider) * dist + grey, gid, 0);
         wheelTexture.write((col2 * satSlider) * dist + grey, gid, 1);
         wheelTexture.write((col3 * satSlider) * dist + grey, gid, 2);
