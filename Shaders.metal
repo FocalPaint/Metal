@@ -99,7 +99,7 @@ kernel void rgbToSpectral(texture2d <half, access::read> rgbTexture [[texture(0)
     spectralTexture.write(half4(log2(colorShort) * alpha), gid, 0);
     spectralTexture.write(half4(log2(colorMedium) * alpha), gid, 1);
     spectralTexture.write(half4(log2(colorLong) * alpha), gid, 2);
-    spectralTexture.write(half4(alpha, max(greyRGBA.r, EPSILON), 1.0, 0.0), gid, 3);
+    spectralTexture.write(half4(alpha, max(greyRGBA.x * half(10.0), EPSILON), 1.0, 0.0), gid, 3);
     
 }
 
@@ -212,8 +212,35 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
 
     for (int dabIndex=0; dabIndex < dabCount; dabIndex++) {
         
+        
         half smudgeLength = dabArray[dabIndex].smudgeLength;
-        if (smudgeLength >= 1.0) continue;
+        uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
+        // extra row/area for more metadata
+        uint2 bucketMeta = uint2(dabArray[dabIndex].smudgeBucket, 1);
+        half4 smudgeBucketMeta = smudgeBuckets.read(bucketMeta, 0);
+
+        // how recent this bucket was updated, break early
+        half recentness = smudgeBucketMeta.x;
+        // smudgeBucketMeta.y signals that we are initted and sampled
+        
+        // reset recentness when we sample
+        if (recentness < 0.5) {
+            if (recentness == 0.0) {
+                smudgeLength = 0.0;
+            }
+            recentness = 1.0;
+            
+        } else {
+            // use recentness for w channel instead of "worked"
+            smudgeBuckets.write(half4(recentness * smudgeLength, smudgeBucketMeta.y, 1, 1), bucketMeta, 0);
+            smudgeBuckets.fence();
+            continue;
+        }
+        
+
+        
+       
+        if (smudgeLength >= 1.0 && smudgeBucketMeta.y == 1) continue;
         
         half2 center = half2(dabArray[dabIndex].pos);
         half dist = distance(half2(gid) + half2(dabMeta->texOrigin), center);
@@ -236,30 +263,13 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeLength = clamp(smudgeLength, half(0.0), half(1.0));
         
         // bucket to update/average into
-        uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
-        
-        half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
-        // how recent this bucket was updated, break early
-        half recentness = smudgeBucketD.w * smudgeLength;
-        
-        // reset recentness when we sample
-        if (recentness < 0.5) {
-            recentness = 1.0;
-            
-            if (recentness == 0.0) {
-                smudgeLength = 0.0;
-            }
-            
-        } else {
-            // use recentness for w channel instead of "worked"
-            smudgeBuckets.write(half4(smudgeBucketD.x, smudgeBucketD.y, smudgeBucketD.z, recentness), bucket, 3);
-            smudgeBuckets.fence();
-            continue;
-        }
+
         
         half4 smudgeBucketA = smudgeBuckets.read(bucket, 0);
         half4 smudgeBucketB = smudgeBuckets.read(bucket, 1);
         half4 smudgeBucketC = smudgeBuckets.read(bucket, 2);
+        half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
+
         
         // sample the canvas
         half4 smudgeSampleA = 0;
@@ -282,6 +292,8 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeBucketD = smudgeBucketD * smudgeLength + (1.0 - smudgeLength) * smudgeSampleD;
          
         
+        smudgeBuckets.write(half4(recentness, 1, 1, 1), bucketMeta, 0);
+
         if (any(isnan(smudgeBucketA)) || any(isnan(smudgeBucketD)) || any(isinf(smudgeBucketA)) || any(isinf(smudgeBucketD))) {
             return;
         }
@@ -289,10 +301,14 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeBuckets.write(smudgeBucketA, bucket, 0);
         smudgeBuckets.write(smudgeBucketB, bucket, 1);
         smudgeBuckets.write(smudgeBucketC, bucket, 2);
+        smudgeBuckets.write(smudgeBucketD, bucket, 3);
         
         // use recentness for w channel instead of "worked"
 
-        smudgeBuckets.write(half4(smudgeBucketD.x, smudgeBucketD.y, smudgeBucketD.z, recentness), bucket, 3);
+//        smudgeBuckets.write(half4(smudgeBucketD.x, smudgeBucketD.y, smudgeBucketD.z, recentness), bucket, 3);
+        // set smudgeBucketMeta.y to 1 to show we have sampled
+
+
         smudgeBuckets.fence();
         
     }
@@ -450,7 +466,7 @@ kernel void reducePaint(texture2d_array <half, access::read> src [[texture(0)]],
     half4 dstMeta = dst.read(gid, 3);
     //half volume = dstMeta.x > 0.0 ? dstMeta.y / dstMeta.x : dstMeta.y;
     //half depth =  clamp(src.read(gid, 3).y + half(dstMeta.y / 2.0) + half(dstMeta.w / 10.0), half(0.0), half(1.0));
-    half depth =  clamp(src.read(gid, 3).y * half(10.0) + half(dstMeta.y / 5.0), half(0.0), half(1.0));
+    half depth =  clamp(src.read(gid, 3).y + half(dstMeta.y / 10.0), half(0.0), half(1.0));
     //if (depth != 0.0) {
         dstS *= depth;
         dstM *= depth;
@@ -890,7 +906,15 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // basis. Kind of good for matching bristles to their
     // own smudge color
     uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
+    uint2 bucketMeta = uint2(dabArray[dabIndex].smudgeBucket, 1);
+    half4 smudgeBucketMeta = smudgeBuckets.read(bucketMeta, 0);
+    
+    // ensure smudge bucket has been initialized and sampled at least once
+    if (smudgeBucketMeta.y < 1 && smudgeAmount > 0) {
+        return;
+    }
     half4 smudgeBucketD = smudgeBuckets.read(bucket, 3);
+    
     
 
     
