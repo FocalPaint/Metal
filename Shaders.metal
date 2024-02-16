@@ -260,7 +260,6 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
             
         }
         
-        smudgeLength = clamp(smudgeLength, half(0.0), half(1.0));
         
         // bucket to update/average into
 
@@ -283,7 +282,16 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeSampleC = canvas.read(gid, 2);
       
         
-       
+//       // reweight smudge by volumes
+//
+//        half volTotal = smudgeSampleD.y + smudgeBucketD.y;
+//        
+//        if (volTotal > 0.0) {
+//            smudgeLength *= (smudgeBucketD.y / volTotal);
+//        }
+        
+        smudgeLength = clamp(smudgeLength, half(0.0), half(1.0));
+
         
         
         smudgeBucketA = smudgeBucketA * smudgeLength + (1.0 - smudgeLength) * smudgeSampleA;
@@ -890,10 +898,13 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     half dist = drawEllipseForDab(center, dabArray, dabMeta, gid, dabIndex, radius, xOffset, yOffset);
     
     // if outside the ellipse, don't draw anything for this dab
-    if (dist > 1.0 || dist < 0.0 || isnan(dist)) return;
     // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
     dist = pow(dist, half(30.0) * hardness);
+    if (dist >= 1.0 || dist < 0.0 || isnan(dist)) return;
+
     strength *= (1.0 - dist);
+    
+    
     half strengthInv = (1.0 - strength);
     half eraserStrength = 1.0 - (dabArray[dabIndex].eraser * strength);
     
@@ -952,10 +963,10 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     
     
     // calculate volume/thickness
-    half volumeTop = invSmudgeAmount * volume * strength;
-    half volumeBottom = ( smudgeAmount * smudgeBucketD.y ) + (invSmudgeAmount * dstMeta.y);
-    half volumeResult = eraserStrength * clamp(volumeTop + volumeBottom, half(0.0), half(10.0));
-    
+    half volumeTop = invSmudgeAmount * volume;
+    half volumeBottom = smudgeAmount * smudgeBucketD.y;
+    half volumeResult = (strength * (volumeTop + volumeBottom)) + eraserStrength * strengthInv * dstMeta.y;
+    volumeResult = clamp(volumeResult, half(0.0), half(10.0));
     
     // this is less weird than smudgeThicknessThreshold.
     // Don't paint if the brush thickness is going to add less than what is already on the canvas
@@ -972,7 +983,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // calculate opacity before applying thickness
     half topOpacity = (smudgeAmount * smudgeBucketD.x + invSmudgeAmount * opacity) * strength;
     half bottomOpacity = strengthInv * dstMeta.x;
-    half opacityResult =  eraserStrength * (topOpacity + bottomOpacity);
+    half opacityResult = (topOpacity + bottomOpacity);
     
     // apply beer-lambert-like multiplier to the color based on opacity and thickness
     half beerMultiplier = (volume * ((half(1.0) - opacity))) + 1.0;
@@ -980,7 +991,7 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     
     half wetness = eraserStrength * clamp(half(strength * (1.0 - dabArray[dabIndex].wetness) +  strengthInv * dstMeta.w), half(0.0), half(1.0));
     half beerMultiplierTop = (smudgeAmount * smudgeBucketD.z + invSmudgeAmount * beerMultiplier) * strength;
-    half beerResult = beerMultiplierTop + strengthInv * dstMeta.z;
+    half beerResult = (beerMultiplierTop + strengthInv * dstMeta.z);
     
     // brush color, 12 channels, remember?
     // log2 encoded
