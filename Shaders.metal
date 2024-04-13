@@ -231,7 +231,6 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
             recentness = 1.0;
             
         } else {
-            // use recentness for w channel instead of "worked"
             smudgeBuckets.write(half4(recentness * smudgeLength, smudgeBucketMeta.y, 1, 1), bucketMeta, 0);
             smudgeBuckets.fence();
             continue;
@@ -242,9 +241,14 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
        
         if (smudgeLength >= 1.0 && smudgeBucketMeta.y == 1) continue;
         
+        
+       
+        
         half2 center = half2(dabArray[dabIndex].pos);
         half dist = distance(half2(gid) + half2(dabMeta->texOrigin), center);
-        if (dist > dabArray[dabIndex].smudgeRadius) continue; // skip sampling beyond the smudge radius
+        if (dist > dabArray[dabIndex].smudgeRadius + 2) continue; // skip sampling beyond the smudge radius
+        
+        smudgeBuckets.write(half4(recentness, 1, 1, 1), bucketMeta, 0);
         
         half4 smudgeSampleD = 0;
         smudgeSampleD = canvas.read(gid, 3);
@@ -300,7 +304,6 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeBucketD = smudgeBucketD * smudgeLength + (1.0 - smudgeLength) * smudgeSampleD;
          
         
-        smudgeBuckets.write(half4(recentness, 1, 1, 1), bucketMeta, 0);
 
         if (any(isnan(smudgeBucketA)) || any(isnan(smudgeBucketD)) || any(isinf(smudgeBucketA)) || any(isinf(smudgeBucketD))) {
             return;
@@ -310,11 +313,6 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         smudgeBuckets.write(smudgeBucketB, bucket, 1);
         smudgeBuckets.write(smudgeBucketC, bucket, 2);
         smudgeBuckets.write(smudgeBucketD, bucket, 3);
-        
-        // use recentness for w channel instead of "worked"
-
-//        smudgeBuckets.write(half4(smudgeBucketD.x, smudgeBucketD.y, smudgeBucketD.z, recentness), bucket, 3);
-        // set smudgeBucketMeta.y to 1 to show we have sampled
 
 
         smudgeBuckets.fence();
