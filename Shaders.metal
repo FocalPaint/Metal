@@ -1169,7 +1169,7 @@ kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
 vertex RasterizerData
 vertexShader(uint vertexID [[ vertex_id ]],
              constant Vertex *vertexArray [[ buffer(0) ]],
-             constant vector_uint2 *viewportSizePointer  [[ buffer(1) ]])
+             constant vector_float2 *viewportSizePointer  [[ buffer(1) ]])
 
 {
 
