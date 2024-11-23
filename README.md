@@ -39,7 +39,6 @@ have the same arguments as this example, but you can also include other function
 
 ```
 // this just fills the whole buffer with the brush color, skipping all other settings, etc
-// the color brightness is scaled by pressure
 
 kernel void customBrushShader(
   constant Dab *dabArray [[ buffer(0) ]],
@@ -54,12 +53,11 @@ kernel void customBrushShader(
     half4 color0 = half4(dabArray[0].color[0]);
     half4 color1 = half4(dabArray[0].color[1]);
     half4 color2 = half4(dabArray[0].color[2]);
-    half pressure = 1.0 - dabArray[0].pressure;
 
-    canvas.write(color0 * (pressure * 10.0), gid, 0);
-    canvas.write(color1 * (pressure * 10.0), gid, 1);
-    canvas.write(color2 * (pressure * 10.0), gid, 2);
-    canvas.write(half4(1.0, pressure * 10.0,  1.0, 1.0), gid, 3);
+    canvas.write(color0, gid, 0);
+    canvas.write(color1, gid, 1);
+    canvas.write(color2, gid, 2);
+    canvas.write(half4(1.0, 10.0,  1.0, 1.0), gid, 3);
 }
 ```
 
