@@ -103,7 +103,7 @@ struct Dab {
     // how stong to pick up color from layer below active layer
     // only when smudging
     float solvent;
-    // how much media sinks into depressions in the canvas texture
+    // how much smudge lifts up lower layer paint
     float wetness;
     // thickness threshold, similar to lock alpha concept
     float thicknessThreshold;
