@@ -16,41 +16,7 @@ constant half EPSILON = 0.0002; // for some reason 0.0001 is too small, NaNs
 constant half offset = 1.0 - EPSILON;
 constant half EPSILON_LOG = -12.287712379549449;
 
-// this matrix brings us from spectral to (extended) sRGB primaries, which is required for Metal.
-// It's still P3 wide color, the values may be negative.
-//constant half T_MATRIX [3][12] ={{0.043360489449518, 0.026456474761540, 0.020238299013514,
-//    -0.074764289932655, -0.170370642119887, -0.104586664428807,
-//    -0.086581468179310, -0.068906811339458, 0.457056404183395,
-//    0.437453976232458, 0.431715004832538, 0.157869804779479},
-//    {-0.040534472903886, -0.033419552329132, -0.029293045613806,
-//    0.057466135999207, 0.192345371870075, 0.305415920318147,
-//    0.293190243033650, 0.282447833359094, -0.000701733209694,
-//        -0.015668249622555, -0.018679051015265, -0.015331520111816},
-//    {0.309776255557529, 0.356528781924368, 0.344528004764383,
-//    0.114183770252453, 0.016619897453525, -0.032036721687686,
-//    -0.031625939891442, -0.031257924571711, -0.009110338431730,
-//    -0.006870381924116, -0.006379347447639, -0.001282228702366}};
-//
-//constant half4 redShort = {0.000102347885217, 0.000101450240849, 0.000102203595088,
-//    0.000182068610178};
-//constant half4 redMedium = { 0.000335278671537, 0.000107101988920,
-//    0.000235302112089, 0.000152926173608 };
-//constant half4 redLong = { 0.678406822261829,
-//    0.963465416215934, 0.925221300535300, 0.595455091698738 };
-//
-//constant half4 greenShort = { 0.000100517500654, 0.000100142149336, 0.000100230124224,
-//    0.000100577314601};
-//constant half4 greenMedium = { 0.979913754835688, 0.975279095060780,
-//    0.979951868675621, 0.970116202772815 };
-//constant half4 greenLong = { 0.274236729494797,
-//    0.000238846302870, 0.031458970725383, 0.371961283042717 };
-//
-//constant half4 blueShort = { 0.979983032675131, 0.979938629678512, 0.979928904521242,
-//    0.979683076599390 };
-//constant half4 blueMedium = { 0.019743831047335, 0.054752823745413,
-//    0.037082288916508, 0.047894730049648 };
-//constant half4 blueLong = { 0.000100410422990,
-//    0.000100262330692, 0.000101046193637, 0.002318893233423};
+
 
 
 struct VertexOut {
@@ -746,104 +712,6 @@ static half drawEllipseForDab(float2 center, const constant Dab *dabArray, const
 }
 
 
-// example custom shader, this "pushes" paint around based on the dab angle, which you can
-// control by mapping Stroke Direction or Azimuth, or whatever, to control.
-
-void blendCustom(half4 middle[4], half4 leading[4], half4 trailing[4], half strength)
-{
-    
-    
-    //if ( leading[3].y < center[3].y * 0.1 || trailing[3].y < center[3].y * 0.1 ) return;
-
-    //half vol = middle[3].y;
-    float strengthForward = clamp(strength + (float(middle[3].y  - leading[3].y ) / (middle[3].y + leading[3].y)), 0.0, 1.0);
-    float strengthInvF=(1.0 - strengthForward);
-
-    half volIncrease = (trailing[3].y < 1 && middle[3].y > 0.0 && middle[3].y < 10.0) ?  strengthForward + 1.0 : 1.0 ;
-//    strengthInvF = pow( (strengthInvF), 1.0 / volIncrease);
-    
-
-
-    middle[3].x = clamp(middle[3].x * strengthInvF + leading[3].x * strengthForward, 0.0, 1.0);
-    
-    half beerFacMiddle = middle[3].z > 0.0 ? middle[3].z : 1.0;
-    half beerFacLeading = middle[3].z > 0.0 ? middle[3].z : 1.0;
-
-    middle[3].y = clamp(middle[3].y * pow((strengthInvF), 1.0 / volIncrease) + leading[3].y * strengthForward, 0.0, 10.0);
-    middle[3].w = middle[3].w * strengthInvF + leading[3].w * strengthForward;
-    middle[3].w = clamp( middle[3].w + strength * 0.01, 0.0, 1000.0);
-    middle[3].z = middle[3].z * strengthInvF + leading[3].z * strengthForward;
-    
-    // apply beer-lambert-like multiplier to the color based on opacity and thickness
-    half beerMultiplier = (middle[3].y * ((half(1.0) - middle[3].x))) + 1.0;
-
-    // blend w/ canvas pixel
-    for (int i = 0; i < 3; ++i) {
-        middle[i] = ((middle[i] / beerFacMiddle) * strengthInvF + (leading[i] / beerFacLeading) * strengthForward) * beerMultiplier;
-    }
-   
-}
-
-kernel void customBrushShader(
-  constant Dab *dabArray [[ buffer(0) ]],
-  constant DabMeta *dabMeta [[ buffer(1) ]],
-  texture2d_array <half, access::read_write> canvas [[texture(0)]],
-  texture2d_array <half, access::read> smudge [[texture(1)]],
-  texture2d_array <half, access::read> lowerCanvas [[texture(2)]],
-  texture2d_array <half, access::sample> canvasSample [[texture(3)]],
-  uint2 gid [[thread_position_in_grid]],
-  uint tid [[thread_index_in_threadgroup]])
-  {
-
-      
-      // for each dab, do a bunch of stuff and store it in the dst
-      int dabCount = dabMeta->dabCount;
-      for (int dabIndex=0; dabIndex < dabCount; ++dabIndex) {
-          // center of the dab to draw
-          float2 center = (dabArray[dabIndex].pos);
-          // translate the position using the global texOrigin coordinates
-          half xOffset = half(gid.x) + dabMeta->texOrigin.x - center.x;
-          half yOffset = half(gid.y) + dabMeta->texOrigin.y - center.y;
-          half strength = dabArray[dabIndex].strength;
-          // radius of the dab to draw, in pixels
-          half radius = dabArray[dabIndex].radius;
-          // hardness is how much to feather the edge of a dab
-          half hardness = dabArray[dabIndex].hardness;
-          
-          half rotation = dabArray[dabIndex].dabAngle;
-          
-          // use a signed distance field to draw the shape
-          half dist = drawEllipseForDab(center, dabArray, dabMeta, gid, dabIndex, radius, xOffset, yOffset);
-          
-          // if outside the ellipse, don't draw anything for this dab
-          if (dist > 1.0 || dist < 0.0 || isnan(dist)) continue;
-          // otherwise, use the distance to adjust strength to fade out w/ hardness parameter
-          strength *= (1.0 - (pow(dist, half(30.0) * hardness)));
-          
-          // determine which two samples to read based on angle
-          int2 dir = int2(round(normalize(float2(cos(rotation), sin(rotation))  )* 1.8));
-          int2 dirRev = int2(-1.0 * float2(dir));
-          //uint2 sample_coord_trailing = uint2(int2(gid) + int2(dir));
-
-//          if (dir.x == -1 && dir.y == 0) {
-          
-          half4 middle[4];
-          half4 leading[4];
-          half4 trailing[4];
-          for (int i = 0; i < 4; ++i) {
-              middle[i] = canvas.read(gid, i);
-              leading[i] = canvas.read(uint2(int2(gid) - dir), i);
-              trailing[i] = canvas.read(uint2(int2(gid) - dirRev), i);
-              
-          }
-          
-          blendCustom(middle, leading, trailing, strength);
-          for (int i = 0; i < 4; ++i) {
-            canvas.write(middle[i], gid, i);
-          }
-      }
-}
-
 
 // draw a normal dab
 static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const constant DabMeta *dabMeta, thread half4 &dstA, thread half4 &dstB, thread half4 &dstC, thread half4 &dstMeta, texture2d_array <half, access::read> lowerLayer, thread const texture2d_array<half, access::read> &smudgeBuckets, uint2 gid, uint tid) {
@@ -1075,16 +943,17 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     dstMeta = half4(clamp(opacityResult, half(0.0), half(1.0)), volumeResult, beerResult, wetness);
 }
 
-//constant bool hasLowerTexture [[function_constant(0)]];
+// non-kernel function to handle drawing dabs
+// this lets us call this function from another kernel function (custom brush shader, for example)
 
-kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
-                    constant DabMeta *dabMeta [[ buffer(1) ]],
-                    texture2d_array <half, access::read_write> activeLayer [[texture(0)]],
-                    texture2d_array <half, access::read> smudgeBuckets [[texture(1)]],
-                    texture2d_array <half, access::read> lowerLayer [[texture(2)]],
-                    texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
-                    uint2 gid [[thread_position_in_grid]],
-                    uint tid [[thread_index_in_threadgroup]]) {
+static void normalBrush(constant Dab *dabArray [[ buffer(0) ]],
+                     constant DabMeta *dabMeta [[ buffer(1) ]],
+                     texture2d_array <half, access::read_write> activeLayer [[texture(0)]],
+                     texture2d_array <half, access::read> smudgeBuckets [[texture(1)]],
+                     texture2d_array <half, access::read> lowerLayer [[texture(2)]],
+                     texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
+                     uint2 gid [[thread_position_in_grid]],
+                     uint tid [[thread_index_in_threadgroup]]) {
     
     // read the active layer pixels into dstX
     // we will modify this data repeatedly for each dab and write it back into the layer at the end
@@ -1124,6 +993,21 @@ kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
     activeLayer.write(dstC, gid, 2);
     activeLayer.write(dstMeta, gid, 3);
 }
+
+
+kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
+                    constant DabMeta *dabMeta [[ buffer(1) ]],
+                    texture2d_array <half, access::read_write> activeLayer [[texture(0)]],
+                    texture2d_array <half, access::read> smudgeBuckets [[texture(1)]],
+                    texture2d_array <half, access::read> lowerLayer [[texture(2)]],
+                    texture2d_array <half, access::sample> activeLayerSampler [[texture(3)]],
+                    uint2 gid [[thread_position_in_grid]],
+                    uint tid [[thread_index_in_threadgroup]]) {
+
+    normalBrush(dabArray, dabMeta, activeLayer, smudgeBuckets, lowerLayer, activeLayerSampler, gid, tid);
+
+}
+
 
 
 
@@ -1194,3 +1078,9 @@ fragment float4 samplingShader(RasterizerData in [[stage_in]],
     const float4 colorSample = colorTexture.sample (textureSampler, in.textureCoordinate);
     return float4(colorSample);
 }
+
+
+
+
+
+//CUSTOM_SHADER_BEGIN
