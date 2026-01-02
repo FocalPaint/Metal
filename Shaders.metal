@@ -1010,12 +1010,11 @@ kernel void drawDabs(constant Dab *dabArray [[ buffer(0) ]],
 
 
 
-
-kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
-                 texture2d_array<half, access::read_write> dst [[texture(1)]],
-                 constant OverOp &overOp [[ buffer(0) ]],
-                 uint2 gid [[thread_position_in_grid]]) {
-
+static void overOperation(texture2d_array<half, access::read> src [[texture(0)]],
+                   texture2d_array<half, access::read_write> dst [[texture(1)]],
+                   constant OverOp &overOp [[ buffer(0) ]],
+                   uint2 gid [[thread_position_in_grid]]
+                   ) {
     half4 srcS = src.read(gid, 0);
     half4 srcM = src.read(gid, 1);
     half4 srcL = src.read(gid, 2);
@@ -1047,6 +1046,15 @@ kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
     dst.write(srcM, gid, 1);
     dst.write(srcL, gid, 2);
     dst.write(srcMeta, gid, 3);
+}
+
+
+kernel void spectralOver(texture2d_array<half, access::read> src [[texture(0)]],
+                 texture2d_array<half, access::read_write> dst [[texture(1)]],
+                 constant OverOp &overOp [[ buffer(0) ]],
+                 uint2 gid [[thread_position_in_grid]]) {
+    overOperation(src, dst, overOp, gid);
+    
 }
 
 // Vertex Function
