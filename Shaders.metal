@@ -958,22 +958,12 @@ static void normalBrush(constant Dab *dabArray [[ buffer(0) ]],
     // read the active layer pixels into dstX
     // we will modify this data repeatedly for each dab and write it back into the layer at the end
     // our data format is 16 channels. 12 log2 color channels (first 3 textures) and a metadata texture
-    // metadata stores opacity, thickness, a thickness/opacity factor, and a "worked" factor that negates the
-    // background texture tooth effects
+    // metadata stores opacity, thickness, a thickness/opacity factor, and a wetness channel
     half4 dstA = activeLayer.read(gid, 0);
     half4 dstB = activeLayer.read(gid, 1);
     half4 dstC = activeLayer.read(gid, 2);
     half4 dstMeta = activeLayer.read(gid, 3);
     
-//    half4 lowerA, lowerB, lowerC, lowerMeta;
-//    if (dabMeta->hasLowerTexture == 1) {
-//        // if there is a lower layer, read that in. We might use it
-//
-//        lowerA = lowerLayer.read(gid, 0);
-//        lowerB = lowerLayer.read(gid, 1);
-//        lowerC = lowerLayer.read(gid, 2);
-//        lowerMeta = lowerLayer.read(gid, 3);
-//    }
     
     // for each dab, do a bunch of stuff and store it in the dst
     int dabCount = dabMeta->dabCount;
