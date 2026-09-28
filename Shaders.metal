@@ -180,9 +180,11 @@ kernel void updateSmudgeBuckets(constant Dab *dabArray [[ buffer(0) ]],
         
         
         half smudgeLength = dabArray[dabIndex].smudgeLength;
-        uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
+        uint smudgeColumn = dabArray[dabIndex].smudgeBucket % 255;
+        uint smudgeRow = dabArray[dabIndex].smudgeBucket / 255;
+        uint2 bucket = uint2(smudgeColumn, smudgeRow);
         // extra row/area for more metadata
-        uint2 bucketMeta = uint2(dabArray[dabIndex].smudgeBucket, 1);
+        uint2 bucketMeta = uint2(smudgeColumn, smudgeRow + 255);
         half4 smudgeBucketMeta = smudgeBuckets.read(bucketMeta, 0);
 
         // how recent this bucket was updated, break early
@@ -782,8 +784,11 @@ static void drawNormalDab(const constant Dab *dabArray, int dabIndex, const cons
     // a bunch of colors that can be recalled on a per-dab
     // basis. Kind of good for matching bristles to their
     // own smudge color
-    uint2 bucket = uint2(dabArray[dabIndex].smudgeBucket, 0);
-    uint2 bucketMeta = uint2(dabArray[dabIndex].smudgeBucket, 1);
+    uint smudgeColumn = dabArray[dabIndex].smudgeBucket % 255;
+    uint smudgeRow = dabArray[dabIndex].smudgeBucket / 255;
+    uint2 bucket = uint2(smudgeColumn, smudgeRow);
+    // extra row/area for more metadata
+    uint2 bucketMeta = uint2(smudgeColumn, smudgeRow + 255);
     half4 smudgeBucketMeta = smudgeBuckets.read(bucketMeta, 0);
     
     // ensure smudge bucket has been initialized and sampled at least once
